@@ -1,0 +1,147 @@
+from flask import Blueprint, jsonify, request
+from flask_login import login_required, current_user
+from app.models import Zine, Analytics, User
+from app import db
+from datetime import datetime, timedelta
+from sqlalchemy import func
+import os
+from werkzeug.utils import secure_filename
+from PIL import Image
+import uuid
+
+bp = Blueprint('api', __name__, url_prefix='/api')
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+UPLOAD_FOLDER = 'static/uploads'
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@bp.route('/upload', methods=['POST'])
+@login_required
+def upload_image():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4()}_{filename}"
+
+        user_folder = os.path.join(UPLOAD_FOLDER, str(current_user.id))
+        os.makedirs(user_folder, exist_ok=True)
+
+        filepath = os.path.join(user_folder, unique_filename)
+        file.save(filepath)
+
+        img = Image.open(filepath)
+        if img.width > 1200 or img.height > 1200:
+            img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+            img.save(filepath, optimize=True, quality=85)
+
+        thumbnail_path = filepath.replace('.', '_thumb.')
+        img.thumbnail((300, 300), Image.Resampling.LANCZOS)
+        img.save(thumbnail_path, optimize=True, quality=85)
+
+        return jsonify({
+            'success': True,
+            'url': f'/{filepath}',
+            'thumbnail': f'/{thumbnail_path}'
+        })
+
+    return jsonify({'error': 'Invalid file type'}), 400
+
+@bp.route('/analytics/<int:zine_id>')
+@login_required
+def get_analytics(zine_id):
+    zine = Zine.query.get_or_404(zine_id)
+    if zine.creator_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=30)
+
+    daily_views = db.session.query(
+        func.date(Analytics.created_at).label('date'),
+        func.count(Analytics.id).label('views')
+    ).filter(
+        Analytics.zine_id == zine_id,
+        Analytics.event_type == 'view',
+        Analytics.created_at >= start_date
+    ).group_by(func.date(Analytics.created_at)).all()
+
+    top_referrers = db.session.query(
+        Analytics.referrer,
+        func.count(Analytics.id).label('count')
+    ).filter(
+        Analytics.zine_id == zine_id,
+        Analytics.referrer.isnot(None)
+    ).group_by(Analytics.referrer).order_by(func.count(Analytics.id).desc()).limit(5).all()
+
+    followers_gained = db.session.query(func.count(Analytics.id)).filter(
+        Analytics.zine_id == zine_id,
+        Analytics.event_type == 'follow',
+        Analytics.created_at >= start_date
+    ).scalar() or 0
+
+    return jsonify({
+        'views': zine.views_count,
+        'unique_readers': zine.unique_readers,
+        'avg_read_time': round(zine.avg_read_time, 1) if zine.avg_read_time else 0,
+        'followers_gained': followers_gained,
+        'daily_views': [{'date': str(d.date), 'views': d.views} for d in daily_views],
+        'top_referrers': [{'referrer': r.referrer or 'Direct', 'count': r.count} for r in top_referrers]
+    })
+
+@bp.route('/templates')
+def get_templates():
+    templates = [
+        {
+            'id': 'blank',
+            'name': 'Blank',
+            'preview': '/static/images/template-blank.png',
+            'blocks': []
+        },
+        {
+            'id': 'cover',
+            'name': 'Cover Page',
+            'preview': '/static/images/template-cover.png',
+            'blocks': [
+                {'type': 'text', 'content': 'Your Title', 'style': 'title', 'x': 50, 'y': 40},
+                {'type': 'text', 'content': 'Subtitle', 'style': 'subtitle', 'x': 50, 'y': 55}
+            ]
+        },
+        {
+            'id': 'photo-text',
+            'name': 'Photo + Text',
+            'preview': '/static/images/template-photo-text.png',
+            'blocks': [
+                {'type': 'image', 'x': 10, 'y': 10, 'width': 80, 'height': 40},
+                {'type': 'text', 'content': 'Your text here', 'x': 10, 'y': 55, 'width': 80}
+            ]
+        },
+        {
+            'id': 'grid',
+            'name': 'Grid Layout',
+            'preview': '/static/images/template-grid.png',
+            'blocks': [
+                {'type': 'image', 'x': 10, 'y': 10, 'width': 35, 'height': 35},
+                {'type': 'image', 'x': 55, 'y': 10, 'width': 35, 'height': 35},
+                {'type': 'image', 'x': 10, 'y': 55, 'width': 35, 'height': 35},
+                {'type': 'image', 'x': 55, 'y': 55, 'width': 35, 'height': 35}
+            ]
+        },
+        {
+            'id': 'article',
+            'name': 'Article',
+            'preview': '/static/images/template-article.png',
+            'blocks': [
+                {'type': 'text', 'content': 'Article Title', 'style': 'heading', 'x': 10, 'y': 10},
+                {'type': 'text', 'content': 'Your article text...', 'x': 10, 'y': 20, 'width': 80, 'height': 70}
+            ]
+        }
+    ]
+    return jsonify(templates)

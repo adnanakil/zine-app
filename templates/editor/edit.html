@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ zine.title }} - Zines{% endblock %}
+
+{% block extra_css %}
+<style>
+    .editor-container {
+        display: flex;
+        height: calc(100vh - 120px);
+    }
+    .editor-sidebar {
+        width: 250px;
+        background: #f5f5f5;
+        padding: 20px;
+        overflow-y: auto;
+    }
+    .editor-canvas {
+        flex: 1;
+        background: #e0e0e0;
+        padding: 20px;
+        overflow: auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .page-container {
+        background: white;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        position: relative;
+    }
+    .page-container.A5 {
+        width: 420px;
+        height: 594px;
+    }
+    .page-container.A4 {
+        width: 595px;
+        height: 842px;
+    }
+    .page-container.square {
+        width: 500px;
+        height: 500px;
+    }
+    .draggable-element {
+        position: absolute;
+        cursor: move;
+        border: 2px solid transparent;
+        padding: 10px;
+    }
+    .draggable-element.selected {
+        border-color: #007bff;
+    }
+    .draggable-element.text {
+        min-width: 100px;
+        min-height: 30px;
+    }
+    .draggable-element.image {
+        background: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .toolbar {
+        background: white;
+        padding: 10px;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    .page-list {
+        margin-top: 20px;
+    }
+    .page-thumb {
+        background: white;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 2px solid #ddd;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    .page-thumb.active {
+        border-color: #007bff;
+    }
+    .element-tools {
+        margin-top: 20px;
+    }
+    .element-btn {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    .element-btn:hover {
+        background: #f0f0f0;
+    }
+    .template-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    .template-item {
+        padding: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        cursor: pointer;
+        text-align: center;
+        border-radius: 4px;
+    }
+    .template-item:hover {
+        background: #f0f0f0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <button id="saveBtn" class="btn-primary">Save</button>
+    <button id="addPageBtn" class="btn-secondary">Add Page</button>
+    <button id="previewBtn" class="btn-secondary">Preview</button>
+    <button id="publishBtn" class="btn-success">Publish</button>
+    <span style="margin-left: auto;">{{ zine.title }}</span>
+</div>
+
+<div class="editor-container">
+    <div class="editor-sidebar">
+        <h3>Elements</h3>
+        <div class="element-tools">
+            <button class="element-btn" data-type="text">Add Text</button>
+            <button class="element-btn" data-type="image">Add Image</button>
+            <button class="element-btn" data-type="shape">Add Shape</button>
+        </div>
+
+        <h3>Templates</h3>
+        <div class="template-grid">
+            <div class="template-item" data-template="blank">Blank</div>
+            <div class="template-item" data-template="cover">Cover</div>
+            <div class="template-item" data-template="photo-text">Photo+Text</div>
+            <div class="template-item" data-template="grid">Grid</div>
+        </div>
+
+        <h3>Pages</h3>
+        <div class="page-list">
+            {% for page in pages %}
+            <div class="page-thumb {% if loop.first %}active{% endif %}" data-page-id="{{ page.id }}">
+                Page {{ loop.index }}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="editor-canvas">
+        <div id="pageCanvas" class="page-container {{ zine.layout_type }}" data-zine-id="{{ zine.id }}">
+        </div>
+    </div>
+</div>
+
+<input type="file" id="imageUpload" style="display: none;" accept="image/*">
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPageId = {{ pages[0].id if pages else 'null' }};
+let selectedElement = null;
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
+let elements = [];
+
+const pageCanvas = document.getElementById('pageCanvas');
+const imageUpload = document.getElementById('imageUpload');
+
+document.querySelectorAll('.element-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const type = e.target.dataset.type;
+        addElement(type);
+    });
+});
+
+function addElement(type, options = {}) {
+    const element = document.createElement('div');
+    element.className = 'draggable-element ' + type;
+    element.dataset.type = type;
+    element.dataset.id = Date.now();
+
+    if (type === 'text') {
+        element.contentEditable = true;
+        element.textContent = options.content || 'Click to edit';
+        element.style.fontSize = options.fontSize || '16px';
+    } else if (type === 'image') {
+        if (options.src) {
+            const img = document.createElement('img');
+            img.src = options.src;
+            img.style.width = '100%';
+            img.style.height = '100%';
+            element.appendChild(img);
+        } else {
+            element.innerHTML = '<span>Click to upload image</span>';
+            element.addEventListener('click', () => {
+                if (!isDragging) {
+                    selectedElement = element;
+                    imageUpload.click();
+                }
+            });
+        }
+    } else if (type === 'shape') {
+        element.style.background = options.color || '#007bff';
+        element.style.borderRadius = options.shape === 'circle' ? '50%' : '0';
+    }
+
+    element.style.left = options.x || '50px';
+    element.style.top = options.y || '50px';
+    element.style.width = options.width || (type === 'text' ? 'auto' : '100px');
+    element.style.height = options.height || (type === 'text' ? 'auto' : '100px');
+
+    element.addEventListener('mousedown', startDrag);
+    pageCanvas.appendChild(element);
+    elements.push(element);
+}
+
+function startDrag(e) {
+    if (e.target.contentEditable === 'true' && e.target.classList.contains('text')) {
+        return;
+    }
+
+    selectedElement = e.currentTarget;
+    document.querySelectorAll('.draggable-element').forEach(el => {
+        el.classList.remove('selected');
+    });
+    selectedElement.classList.add('selected');
+
+    isDragging = true;
+    const rect = selectedElement.getBoundingClientRect();
+    const canvasRect = pageCanvas.getBoundingClientRect();
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', stopDrag);
+    e.preventDefault();
+}
+
+function drag(e) {
+    if (!isDragging) return;
+
+    const canvasRect = pageCanvas.getBoundingClientRect();
+    let x = e.clientX - canvasRect.left - dragOffset.x;
+    let y = e.clientY - canvasRect.top - dragOffset.y;
+
+    x = Math.max(0, Math.min(x, canvasRect.width - selectedElement.offsetWidth));
+    y = Math.max(0, Math.min(y, canvasRect.height - selectedElement.offsetHeight));
+
+    const gridSize = 10;
+    x = Math.round(x / gridSize) * gridSize;
+    y = Math.round(y / gridSize) * gridSize;
+
+    selectedElement.style.left = x + 'px';
+    selectedElement.style.top = y + 'px';
+}
+
+function stopDrag() {
+    isDragging = false;
+    document.removeEventListener('mousemove', drag);
+    document.removeEventListener('mouseup', stopDrag);
+}
+
+imageUpload.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0] && selectedElement) {
+        const formData = new FormData();
+        formData.append('file', e.target.files[0]);
+
+        fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                selectedElement.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = data.url;
+                img.style.width = '100%';
+                img.style.height = '100%';
+                selectedElement.appendChild(img);
+            }
+        });
+    }
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+    const content = {
+        blocks: Array.from(pageCanvas.children).map(el => ({
+            type: el.dataset.type,
+            id: el.dataset.id,
+            x: el.style.left,
+            y: el.style.top,
+            width: el.style.width,
+            height: el.style.height,
+            content: el.dataset.type === 'text' ? el.textContent : null,
+            src: el.querySelector('img') ? el.querySelector('img').src : null,
+            style: {
+                fontSize: el.style.fontSize,
+                color: el.style.color,
+                background: el.style.background,
+                borderRadius: el.style.borderRadius
+            }
+        }))
+    };
+
+    fetch(`/editor/{{ zine.id }}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            page_id: currentPageId,
+            content: content
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('Saved successfully!');
+        }
+    });
+});
+
+document.getElementById('addPageBtn').addEventListener('click', () => {
+    fetch(`/editor/{{ zine.id }}/add-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        }
+    });
+});
+
+document.getElementById('publishBtn').addEventListener('click', () => {
+    const visibility = confirm('Make this zine public? (OK for public, Cancel for unlisted)') ? 'public' : 'unlisted';
+    const tags = prompt('Enter up to 3 tags (comma-separated):');
+
+    fetch(`/editor/{{ zine.id }}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            visibility: visibility,
+            tags: tags ? tags.split(',').map(t => t.trim()).slice(0, 3) : []
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('Published! View at: ' + data.url);
+            window.location.href = data.url;
+        }
+    });
+});
+
+document.querySelectorAll('.page-thumb').forEach(thumb => {
+    thumb.addEventListener('click', (e) => {
+        document.getElementById('saveBtn').click();
+        currentPageId = e.target.dataset.pageId;
+        document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
+        e.target.classList.add('active');
+        loadPage(currentPageId);
+    });
+});
+
+document.querySelectorAll('.template-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+        loadTemplate(e.target.dataset.template);
+    });
+});
+
+function loadTemplate(templateId) {
+    fetch('/api/templates')
+        .then(res => res.json())
+        .then(templates => {
+            const template = templates.find(t => t.id === templateId);
+            if (template) {
+                pageCanvas.innerHTML = '';
+                elements = [];
+                template.blocks.forEach(block => {
+                    addElement(block.type, block);
+                });
+            }
+        });
+}
+
+function loadPage(pageId) {
+}
+
+{% if pages %}
+loadPage({{ pages[0].id }});
+{% endif %}
+</script>
+{% endblock %}

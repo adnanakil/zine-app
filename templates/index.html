@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Zines{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if feed %}
+        <h1>Your Feed</h1>
+        <p class="subtitle">Latest zines from creators you follow</p>
+    {% else %}
+        <div class="hero">
+            <h1>Create & Share Beautiful Digital Zines</h1>
+            <p>Design, publish, and build an audience for your creative work</p>
+            <a href="/auth/register" class="btn-hero">Get Started Free</a>
+        </div>
+        <h2>Featured Zines</h2>
+    {% endif %}
+
+    <div class="zine-grid">
+        {% for zine in zines %}
+        <div class="zine-card">
+            <a href="/{{ zine.creator.username }}/{{ zine.slug }}">
+                {% if zine.cover_image %}
+                    <img src="{{ zine.cover_image }}" alt="{{ zine.title }}" class="zine-cover">
+                {% else %}
+                    <div class="zine-cover-placeholder">
+                        <span>{{ zine.title[:1] }}</span>
+                    </div>
+                {% endif %}
+            </a>
+            <div class="zine-info">
+                <h3><a href="/{{ zine.creator.username }}/{{ zine.slug }}">{{ zine.title }}</a></h3>
+                <p class="zine-creator">by <a href="/{{ zine.creator.username }}">{{ zine.creator.username }}</a></p>
+                <p class="zine-stats">
+                    <span>👁 {{ zine.views_count }}</span>
+                    <span>📖 {{ zine.pages.count() }} pages</span>
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not zines %}
+        <div class="empty-state">
+            <p>No zines to show yet</p>
+            {% if feed %}
+                <p>Follow some creators to see their zines here!</p>
+                <a href="/explore" class="btn-primary">Explore Zines</a>
+            {% else %}
+                <a href="/editor/new" class="btn-primary">Create Your First Zine</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

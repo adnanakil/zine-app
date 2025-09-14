@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Create New Zine - Zines{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h2>Create New Zine</h2>
+    <form method="POST" action="/editor/create">
+        <div class="form-group">
+            <label for="title">Title</label>
+            <input type="text" id="title" name="title" required maxlength="255">
+        </div>
+        <div class="form-group">
+            <label for="description">Description (optional)</label>
+            <textarea id="description" name="description" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="layout_type">Page Layout</label>
+            <select id="layout_type" name="layout_type">
+                <option value="A5">A5 (Portrait)</option>
+                <option value="A4">A4 (Portrait)</option>
+                <option value="square">Square</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%;">Create Zine</button>
+    </form>
+</div>
+{% endblock %}
