@@ -10,6 +10,12 @@ function initializeFirebase(config) {
         return;
     }
 
+    // Debug: Log configuration (sanitized)
+    console.log('Initializing Firebase with config:', {
+        ...config,
+        apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : 'missing'
+    });
+
     // Load Firebase v9+ SDK modules dynamically
     const script = document.createElement('script');
     script.type = 'module';
@@ -27,10 +33,18 @@ function initializeFirebase(config) {
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js';
 
-        // Initialize Firebase
-        const app = initializeApp(${JSON.stringify(config)});
-        const auth = getAuth(app);
-        const analytics = ${config.measurementId ? `getAnalytics(app)` : 'null'};
+        try {
+            // Initialize Firebase
+            const app = initializeApp(${JSON.stringify(config)});
+            const auth = getAuth(app);
+            const analytics = ${config.measurementId ? `getAnalytics(app)` : 'null'};
+
+            console.log('Firebase app initialized successfully');
+        } catch (error) {
+            console.error('Firebase initialization error:', error);
+            window.firebaseInitError = error;
+            return;
+        }
 
         // Make auth functions available globally
         window.firebaseAuth = {
