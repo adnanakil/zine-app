@@ -1,6 +1,13 @@
-# Minimal test to see if WSGI works at all
-def application(environ, start_response):
-    status = '200 OK'
-    headers = [('Content-Type', 'text/plain')]
-    start_response(status, headers)
-    return [b'Hello from Vercel Python!']
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    return 'Hello from Flask on Vercel!'
+
+@app.route('/test')
+def test():
+    return 'Test route working!'
+
+# For Vercel, the app object is used directly
