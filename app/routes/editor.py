@@ -125,8 +125,13 @@ def edit(zine_id):
             def __init__(self, data):
                 self.__dict__.update(data)
                 self.pages = type('Pages', (), {'all': lambda: pages})()
+                # Ensure id is accessible
+                if 'id' not in self.__dict__ and '_id' in self.__dict__:
+                    self.id = self._id
 
         zine_obj = ZineObj(zine)
+        print(f"DEBUG: Zine ID being passed to template: {zine_obj.id}")
+        print(f"DEBUG: Zine data: {zine}")
         return render_template('editor/edit.html', zine=zine_obj, pages=pages)
     else:
         # SQLAlchemy fallback
