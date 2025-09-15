@@ -33,7 +33,7 @@
                 <p class="zine-creator">by <a href="/{{ zine.creator.username }}">{{ zine.creator.username }}</a></p>
                 <p class="zine-stats">
                     <span>👁 {{ zine.views_count }}</span>
-                    <span>📖 {{ zine.pages.count() }} pages</span>
+                    <span>📖 {{ zine.pages|length if zine.pages else 0 }} pages</span>
                 </p>
             </div>
         </div>
