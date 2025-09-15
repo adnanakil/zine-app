@@ -42,8 +42,26 @@ def firebase_login():
     name = decoded_token.get('name', '')
     picture = decoded_token.get('picture', '')
 
-    # Check if user exists
-    user = User.query.filter_by(firebase_uid=firebase_uid).first()
+    # Try Firestore first
+    use_firestore = False
+    try:
+        from app.firestore_db import firestore_db
+        if firestore_db.is_available():
+            from app.firestore_models import FirestoreUser
+            use_firestore = True
+            print(f"Using Firestore for authentication")
+    except Exception as e:
+        print(f"Firestore not available for auth: {e}")
+
+    if use_firestore:
+        # Check if user exists in Firestore
+        user = FirestoreUser.get_by_firebase_uid(firebase_uid)
+        if not user:
+            # Also check by email
+            user = FirestoreUser.get_by_email(email)
+    else:
+        # Fallback to SQLAlchemy
+        user = User.query.filter_by(firebase_uid=firebase_uid).first()
 
     if not user:
         # Create new user
@@ -53,26 +71,72 @@ def firebase_login():
 
         username = base_username
         counter = 1
-        while User.query.filter_by(username=username).first():
-            username = f"{base_username}{counter}"
-            counter += 1
 
-        user = User(
-            firebase_uid=firebase_uid,
-            email=email,
-            username=username,
-            display_name=name,
-            avatar_url=picture
-        )
-        db.session.add(user)
-        db.session.commit()
+        if use_firestore:
+            # Check username uniqueness in Firestore
+            while firestore_db.get_user_by_username(username):
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            # Create user in Firestore with UUID
+            import uuid
+            from datetime import datetime
+            from werkzeug.security import generate_password_hash
+
+            user_id = f"user_{uuid.uuid4()}"
+            user_data = {
+                'id': user_id,
+                'firebase_uid': firebase_uid,
+                'email': email,
+                'username': username,
+                'display_name': name,
+                'avatar_url': picture,
+                'bio': '',
+                'created_at': datetime.utcnow(),
+                'followers_count': 0,
+                'following_count': 0,
+                'email_notifications': True
+            }
+
+            firestore_db._get_db().collection('users').document(user_id).set(user_data)
+            user = FirestoreUser(user_data)
+            print(f"Created Firestore user: {username} with ID: {user_id}")
+        else:
+            # SQLAlchemy fallback
+            while User.query.filter_by(username=username).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            user = User(
+                firebase_uid=firebase_uid,
+                email=email,
+                username=username,
+                display_name=name,
+                avatar_url=picture
+            )
+            db.session.add(user)
+            db.session.commit()
     else:
         # Update existing user info
-        user.email = email
-        user.display_name = name
-        if picture:
-            user.avatar_url = picture
-        db.session.commit()
+        if use_firestore:
+            # Update Firestore user
+            updates = {
+                'email': email,
+                'display_name': name
+            }
+            if picture:
+                updates['avatar_url'] = picture
+
+            firestore_db.update_user(user.id, updates)
+            # Refresh user object
+            user = FirestoreUser.get(user.id)
+        else:
+            # SQLAlchemy update
+            user.email = email
+            user.display_name = name
+            if picture:
+                user.avatar_url = picture
+            db.session.commit()
 
     # Log in the user
     login_user(user, remember=True)
