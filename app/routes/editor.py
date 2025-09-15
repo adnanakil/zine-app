@@ -23,7 +23,6 @@ def new_zine():
 def create_zine():
     title = request.form.get('title')
     description = request.form.get('description')
-    layout_type = request.form.get('layout_type', 'A5')
 
     slug = generate_slug(title)
     counter = 1
@@ -37,7 +36,6 @@ def create_zine():
         title=title,
         slug=slug,
         description=description,
-        layout_type=layout_type,
         status='draft'
     )
     db.session.add(zine)

@@ -341,3 +341,67 @@ body {
     color: #666;
     font-size: 14px;
 }
+/* Full-screen mobile zine experience */
+@media (max-width: 768px) {
+    /* Full-screen viewer on mobile */
+    .viewer-container {
+        padding: 0;
+        margin: 0;
+        width: 100vw;
+        min-height: 100vh;
+    }
+
+    .viewer-container .page-viewer {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        box-shadow: none;
+        margin: 0;
+    }
+
+    /* Hide navigation in viewer on mobile */
+    body.viewing-zine .navbar,
+    body.viewing-zine .footer {
+        display: none;
+    }
+
+    body.viewing-zine .main-content {
+        padding: 0;
+        margin: 0;
+    }
+
+    /* Full-screen editor on mobile */
+    .editor-container {
+        height: 100vh;
+        flex-direction: column;
+    }
+
+    .editor-sidebar {
+        width: 100%;
+        height: auto;
+        order: 2;
+        padding: 10px;
+    }
+
+    .editor-canvas {
+        order: 1;
+        height: calc(100vh - 150px);
+        padding: 10px;
+    }
+
+    .page-container {
+        width: calc(100vw - 20px) !important;
+        height: calc(100vh - 250px) !important;
+        max-width: none !important;
+        max-height: none !important;
+    }
+}
+
+/* Desktop: phone preview */
+@media (min-width: 769px) {
+    .page-viewer,
+    .page-container {
+        max-width: 400px;
+        aspect-ratio: 9/16;
+    }
+}

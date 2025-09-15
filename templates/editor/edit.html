@@ -27,18 +27,21 @@
         background: white;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         position: relative;
+        /* Full viewport size with aspect ratio for mobile */
+        width: min(90vw, 400px);
+        height: min(90vh - 200px, 600px);
+        /* Maintain aspect ratio similar to phone screen */
+        aspect-ratio: 9/16;
+        max-width: 400px;
+        max-height: 711px;
     }
-    .page-container.A5 {
-        width: 420px;
-        height: 594px;
-    }
-    .page-container.A4 {
-        width: 595px;
-        height: 842px;
-    }
-    .page-container.square {
-        width: 500px;
-        height: 500px;
+    @media (max-width: 768px) {
+        .page-container {
+            width: calc(100vw - 40px);
+            height: calc(100vh - 200px);
+            max-width: none;
+            max-height: none;
+        }
     }
     .draggable-element {
         position: absolute;
@@ -154,7 +157,7 @@
     </div>
 
     <div class="editor-canvas">
-        <div id="pageCanvas" class="page-container {{ zine.layout_type }}" data-zine-id="{{ zine.id }}">
+        <div id="pageCanvas" class="page-container" data-zine-id="{{ zine.id }}">
         </div>
     </div>
 </div>

@@ -24,18 +24,19 @@
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         margin: 0 auto;
         position: relative;
+        /* Full-screen responsive design */
+        width: 100vw;
+        height: 100vh;
+        max-width: 100%;
+        max-height: 100%;
     }
-    .page-viewer.A5 {
-        width: 420px;
-        min-height: 594px;
-    }
-    .page-viewer.A4 {
-        width: 595px;
-        min-height: 842px;
-    }
-    .page-viewer.square {
-        width: 500px;
-        min-height: 500px;
+    @media (min-width: 769px) {
+        /* Desktop: show phone-sized preview */
+        .page-viewer {
+            width: min(400px, 90vw);
+            height: min(711px, 90vh);
+            aspect-ratio: 9/16;
+        }
     }
     .page-content {
         position: relative;
@@ -155,7 +156,7 @@
 
     <div id="viewerContent" class="scroll-mode">
         {% for page in pages %}
-        <div class="page-viewer {{ zine.layout_type }}" data-page="{{ loop.index }}">
+        <div class="page-viewer" data-page="{{ loop.index }}">
             <div class="page-content">
                 {% if page.content and page.content.blocks %}
                     {% for block in page.content.blocks %}
