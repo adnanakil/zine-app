@@ -18,7 +18,6 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @bp.route('/upload', methods=['POST'])
-@login_required
 def upload_image():
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -28,28 +27,32 @@ def upload_image():
         return jsonify({'error': 'No file selected'}), 400
 
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        unique_filename = f"{uuid.uuid4()}_{filename}"
+        # For Vercel/serverless, we'll use base64 encoding
+        # or external image URLs instead of local file storage
+        import base64
+        from io import BytesIO
 
-        user_folder = os.path.join(UPLOAD_FOLDER, str(current_user.id))
-        os.makedirs(user_folder, exist_ok=True)
+        # Read the file into memory
+        img = Image.open(file)
 
-        filepath = os.path.join(user_folder, unique_filename)
-        file.save(filepath)
-
-        img = Image.open(filepath)
+        # Resize if too large
         if img.width > 1200 or img.height > 1200:
             img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
-            img.save(filepath, optimize=True, quality=85)
 
-        thumbnail_path = filepath.replace('.', '_thumb.')
-        img.thumbnail((300, 300), Image.Resampling.LANCZOS)
-        img.save(thumbnail_path, optimize=True, quality=85)
+        # Convert to base64
+        buffered = BytesIO()
+        img_format = 'PNG' if file.filename.lower().endswith('.png') else 'JPEG'
+        img.save(buffered, format=img_format, optimize=True, quality=85)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+
+        # Create data URL
+        mime_type = f"image/{img_format.lower()}"
+        data_url = f"data:{mime_type};base64,{img_str}"
 
         return jsonify({
             'success': True,
-            'url': f'/{filepath}',
-            'thumbnail': f'/{thumbnail_path}'
+            'url': data_url,
+            'thumbnail': data_url  # For now, same as main image
         })
 
     return jsonify({'error': 'Invalid file type'}), 400
