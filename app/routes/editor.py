@@ -163,9 +163,28 @@ def save(zine_id):
             return jsonify({'error': 'Unauthorized'}), 403
 
         if page_id:
+            # Update existing page
             page = firestore_db.get_page_by_id(page_id)
-        if page.zine_id != zine_id:
-            return jsonify({'error': 'Invalid page'}), 400
+            if page and page.get('zine_id') != zine_id:
+                return jsonify({'error': 'Invalid page'}), 400
+
+            # Update the page content
+            firestore_db.update_page(page_id, {'content': content, 'updated_at': datetime.utcnow()})
+        else:
+            # Create new page
+            pages = firestore_db.get_zine_pages(zine_id)
+            next_order = max([p.get('order', 0) for p in pages]) + 1 if pages else 0
+            page = firestore_db.create_page(
+                zine_id=zine_id,
+                order=next_order,
+                content=content
+            )
+            page_id = page['id']
+
+        # Update zine's updated_at
+        firestore_db.update_zine(zine_id, {'updated_at': datetime.utcnow()})
+
+        return jsonify({'success': True, 'page_id': page_id})
     else:
         last_page = Page.query.filter_by(zine_id=zine_id).order_by(Page.order.desc()).first()
         next_order = (last_page.order + 1) if last_page else 0
