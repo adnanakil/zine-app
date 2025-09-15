@@ -17,8 +17,9 @@ def debug_firebase():
 
     # Check environment variables
     env_vars = [
+        'FIREBASE_SERVICE_ACCOUNT_BASE64',  # Full service account JSON (PREFERRED)
         'FIREBASE_PROJECT_ID',
-        'FIREBASE_PRIVATE_KEY_BASE64',
+        'FIREBASE_PRIVATE_KEY_BASE64',  # Just the private key
         'FIREBASE_PRIVATE_KEY',
         'FIREBASE_CLIENT_EMAIL',
         'FIREBASE_CLIENT_ID',
@@ -34,7 +35,31 @@ def debug_firebase():
             'last_10': value[-10:] if value else 'NOT SET'
         }
 
-    # Try to decode the base64 key
+    # Check for the full service account JSON first (PREFERRED)
+    service_account_base64 = os.getenv('FIREBASE_SERVICE_ACCOUNT_BASE64', '')
+    if service_account_base64:
+        debug_info['service_account'] = {
+            'found': True,
+            'length': len(service_account_base64),
+            'message': '✅ FIREBASE_SERVICE_ACCOUNT_BASE64 found (GOOD!)'
+        }
+        try:
+            # Try to decode and parse it
+            import json
+            decoded = base64.b64decode(service_account_base64).decode('utf-8')
+            parsed = json.loads(decoded)
+            debug_info['service_account']['valid_json'] = True
+            debug_info['service_account']['project_id'] = parsed.get('project_id')
+            debug_info['service_account']['has_private_key'] = bool(parsed.get('private_key'))
+        except Exception as e:
+            debug_info['service_account']['error'] = str(e)
+    else:
+        debug_info['service_account'] = {
+            'found': False,
+            'message': '❌ FIREBASE_SERVICE_ACCOUNT_BASE64 not found - ADD THIS TO VERCEL!'
+        }
+
+    # Try to decode the base64 key (fallback method)
     private_key_base64 = os.getenv('FIREBASE_PRIVATE_KEY_BASE64', '')
     if private_key_base64:
         debug_info['decoding']['base64_found'] = True
@@ -141,5 +166,39 @@ def debug_firebase():
     except Exception as e:
         debug_info['errors'].append(f"Firestore check error: {str(e)}")
         debug_info['firestore'] = {'available': False, 'error': str(e)}
+
+    # Add summary and recommendations
+    debug_info['summary'] = {
+        'firebase_ready': False,
+        'firestore_ready': False,
+        'action_required': []
+    }
+
+    # Check if Firebase can be initialized
+    if service_account_base64:
+        if 'valid_json' in debug_info.get('service_account', {}) and debug_info['service_account']['valid_json']:
+            debug_info['summary']['firebase_ready'] = True
+            debug_info['summary']['message'] = '✅ Firebase configuration looks good!'
+        else:
+            debug_info['summary']['action_required'].append('Fix FIREBASE_SERVICE_ACCOUNT_BASE64 value')
+    else:
+        debug_info['summary']['action_required'].append(
+            '🚨 ADD FIREBASE_SERVICE_ACCOUNT_BASE64 to Vercel Environment Variables!'
+        )
+        debug_info['summary']['action_required'].append(
+            'Copy the value from .env.production (line 6) - it starts with eyJ0eXBlIjo...'
+        )
+        debug_info['summary']['action_required'].append(
+            'It should be 3144 characters long'
+        )
+
+    # Check Firestore status
+    if debug_info.get('firestore', {}).get('available'):
+        debug_info['summary']['firestore_ready'] = True
+    else:
+        if not debug_info['summary']['firebase_ready']:
+            debug_info['summary']['action_required'].append('Fix Firebase configuration first')
+        else:
+            debug_info['summary']['action_required'].append('Check Firestore is enabled in Google Cloud Console')
 
     return jsonify(debug_info)
