@@ -9,9 +9,14 @@ import uuid
 # Try to import Firestore, fall back to SQLAlchemy if not available
 try:
     from app.firestore_db import firestore_db
-    USE_FIRESTORE = True
+    # Check if Firestore is actually available (API enabled, etc.)
+    USE_FIRESTORE = firestore_db.is_available()
+    if not USE_FIRESTORE:
+        print("Firestore not available, using SQLAlchemy")
+        from app.models import User, Zine, Page, Analytics
+        from app import db
 except Exception as e:
-    print(f"Firestore not available: {e}")
+    print(f"Firestore import failed: {e}")
     from app.models import User, Zine, Page, Analytics
     from app import db
     USE_FIRESTORE = False

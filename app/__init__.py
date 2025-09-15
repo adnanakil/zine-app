@@ -63,8 +63,11 @@ def create_app():
         if firebase_app:  # Only use Firestore if Firebase Admin SDK is initialized
             print("Firebase app initialized, attempting Firestore connection...")
             from app.firestore_db import firestore_db
-            firestore_db.init_demo_data()
-            print("Firestore initialized successfully")
+            if firestore_db.is_available():
+                firestore_db.init_demo_data()
+                print("Firestore initialized successfully")
+            else:
+                print("Firestore API not enabled - using SQLAlchemy only")
         else:
             print("Firebase not configured - using SQLAlchemy only")
     except Exception as e:
@@ -74,15 +77,32 @@ def create_app():
         traceback.print_exc()
 
     from app.models import User
-    from app.firestore_models import FirestoreUser
+
+    # Check if Firestore is available
+    use_firestore = False
+    try:
+        from app.firestore_db import firestore_db
+        if firestore_db.is_available():
+            from app.firestore_models import FirestoreUser
+            use_firestore = True
+            print("Using Firestore for user storage")
+        else:
+            print("Using SQLAlchemy for user storage")
+    except Exception as e:
+        print(f"Firestore not available for users: {e}")
 
     @login_manager.user_loader
     def load_user(user_id):
-        # Try Firestore first
-        firestore_user = FirestoreUser.get(user_id)
-        if firestore_user:
-            return firestore_user
-        # Fallback to SQLAlchemy for backward compatibility
+        if use_firestore:
+            # Try Firestore
+            try:
+                firestore_user = FirestoreUser.get(user_id)
+                if firestore_user:
+                    return firestore_user
+            except Exception as e:
+                print(f"Error loading user from Firestore: {e}")
+
+        # Fallback to SQLAlchemy
         try:
             return User.query.get(int(user_id))
         except:

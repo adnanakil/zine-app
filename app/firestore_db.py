@@ -11,13 +11,34 @@ from werkzeug.security import generate_password_hash, check_password_hash
 class FirestoreDB:
     def __init__(self):
         self.db = None
+        self._available = None
 
     def _get_db(self):
-        """Lazy initialization of Firestore client"""
+        """Lazy initialization of Firestore client with availability check"""
         if self.db is None:
-            from firebase_admin import firestore
-            self.db = firestore.client()
+            try:
+                from firebase_admin import firestore
+                self.db = firestore.client()
+                # Test if Firestore is available
+                test_ref = self.db.collection('_test').document('_test')
+                test_ref.set({'test': True})
+                test_ref.delete()
+                self._available = True
+                print("Firestore is available and working")
+            except Exception as e:
+                print(f"Firestore is not available: {e}")
+                self._available = False
+                raise
         return self.db
+
+    def is_available(self):
+        """Check if Firestore is available"""
+        if self._available is None:
+            try:
+                self._get_db()
+            except:
+                pass
+        return self._available == True
 
     # User operations
     def create_user(self, username, email, firebase_uid, password=None):
