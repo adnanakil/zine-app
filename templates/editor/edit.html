@@ -183,7 +183,7 @@
 
 {% block extra_js %}
 <script>
-let currentPageId = {{ pages[0].id if pages else 'null' }};
+let currentPageId = {% if pages %}"{{ pages[0].id }}"{% else %}null{% endif %};
 let selectedElement = null;
 let isDragging = false;
 let isResizing = false;
@@ -553,7 +553,7 @@ function loadPage(pageId) {
 }
 
 {% if pages %}
-loadPage({{ pages[0].id }});
+loadPage("{{ pages[0].id }}");
 {% endif %}
 </script>
 {% endblock %}
