@@ -460,31 +460,62 @@ document.getElementById('addPageBtn').addEventListener('click', () => {
 });
 
 document.getElementById('publishBtn').addEventListener('click', () => {
+    console.log('='.repeat(60));
+    console.log('PUBLISH BUTTON CLICKED');
+    console.log('='.repeat(60));
+
     const zineId = pageCanvas.dataset.zineId;
+    console.log('Zine ID from dataset:', zineId);
+
+    if (!zineId) {
+        console.error('ERROR: No zine ID found in pageCanvas dataset');
+        alert('Error: Cannot publish - no zine ID found');
+        return;
+    }
+
     const visibility = confirm('Make this zine public? (OK for public, Cancel for unlisted)') ? 'public' : 'unlisted';
     const tags = prompt('Enter up to 3 tags (comma-separated):');
 
-    fetch(`/editor/${zineId}/publish`, {
+    const requestData = {
+        visibility: visibility,
+        tags: tags ? tags.split(',').map(t => t.trim()).slice(0, 3) : []
+    };
+
+    const publishUrl = `/editor/${zineId}/publish`;
+    console.log('Publishing to URL:', publishUrl);
+    console.log('Request data:', requestData);
+
+    fetch(publishUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            visibility: visibility,
-            tags: tags ? tags.split(',').map(t => t.trim()).slice(0, 3) : []
-        })
+        body: JSON.stringify(requestData)
     })
-    .then(res => res.json())
+    .then(res => {
+        console.log('Response status:', res.status);
+        console.log('Response headers:', res.headers);
+        if (!res.ok) {
+            console.error('Response not OK. Status:', res.status);
+        }
+        return res.json();
+    })
     .then(data => {
+        console.log('Response data:', data);
         if (data.success) {
+            console.log('Publish successful! URL:', data.url);
             alert('Published! View at: ' + data.url);
             window.location.href = data.url;
         } else if (data.error) {
+            console.error('Server returned error:', data.error);
             alert('Error: ' + data.error);
         }
     })
     .catch(err => {
-        console.error('Publish error:', err);
+        console.error('Publish fetch error:', err);
+        console.error('Error stack:', err.stack);
         alert('Failed to publish: ' + err.message);
     });
+
+    console.log('='.repeat(60));
 });
 
 document.querySelectorAll('.page-thumb').forEach(thumb => {

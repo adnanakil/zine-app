@@ -308,28 +308,61 @@ def delete_page(zine_id, page_id):
 @bp.route('/<zine_id>/publish', methods=['POST'])
 @login_required
 def publish(zine_id):
-    data = request.get_json()
-    visibility = data.get('visibility', 'public')
-    tags_data = data.get('tags', [])[:3]
+    print(f"\n{'='*60}")
+    print(f"PUBLISH ENDPOINT HIT")
+    print(f"{'='*60}")
+    print(f"Zine ID: {zine_id}")
+    print(f"User ID: {current_user.id}")
+    print(f"Request Method: {request.method}")
+    print(f"Request Headers: {dict(request.headers)}")
+
+    try:
+        data = request.get_json()
+        print(f"Request Data: {data}")
+        visibility = data.get('visibility', 'public')
+        tags_data = data.get('tags', [])[:3]
+        print(f"Visibility: {visibility}")
+        print(f"Tags: {tags_data}")
+    except Exception as e:
+        print(f"ERROR parsing request data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Invalid request data: {str(e)}'}), 400
 
     if use_firestore():
+        print("Using Firestore for publish")
         # Firestore implementation
-        zine = firestore_db.get_zine_by_id(zine_id)
-        if not zine or zine.get('creator_id') != current_user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
+        try:
+            zine = firestore_db.get_zine_by_id(zine_id)
+            print(f"Zine retrieved from Firestore: {zine}")
+            if not zine:
+                print(f"ERROR: Zine not found with ID: {zine_id}")
+                return jsonify({'error': 'Zine not found'}), 404
 
-        # Update zine status in Firestore
-        updates = {
-            'status': 'published' if visibility == 'public' else 'unlisted',
-            'published_at': datetime.utcnow(),
-            'tags': tags_data,
-            'updated_at': datetime.utcnow()
-        }
-        firestore_db.update_zine(zine_id, updates)
+            if zine.get('creator_id') != current_user.id:
+                print(f"ERROR: Unauthorized - Creator ID mismatch. Zine creator: {zine.get('creator_id')}, Current user: {current_user.id}")
+                return jsonify({'error': 'Unauthorized'}), 403
 
-        # Get the slug and title from the Firestore zine
-        zine_slug = zine.get('slug')
-        zine_title = zine.get('title')
+            # Update zine status in Firestore
+            updates = {
+                'status': 'published' if visibility == 'public' else 'unlisted',
+                'published_at': datetime.utcnow(),
+                'tags': tags_data,
+                'updated_at': datetime.utcnow()
+            }
+            print(f"Updating zine with: {updates}")
+            firestore_db.update_zine(zine_id, updates)
+            print("Zine updated successfully in Firestore")
+
+            # Get the slug and title from the Firestore zine
+            zine_slug = zine.get('slug')
+            zine_title = zine.get('title')
+            print(f"Zine slug: {zine_slug}, title: {zine_title}")
+        except Exception as e:
+            print(f"ERROR in Firestore publish: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Failed to publish: {str(e)}'}), 500
     else:
         # SQLAlchemy fallback
         try:
@@ -371,9 +404,13 @@ def publish(zine_id):
                     db.session.add(notification)
             db.session.commit()
 
+    publish_url = url_for('viewer.view_zine', username=current_user.username, slug=zine_slug, _external=True)
+    print(f"Publishing successful! URL: {publish_url}")
+    print(f"{'='*60}\n")
+
     return jsonify({
         'success': True,
-        'url': url_for('viewer.view_zine', username=current_user.username, slug=zine_slug, _external=True)
+        'url': publish_url
     })
 
 @bp.route('/my-zines')
