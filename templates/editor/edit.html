@@ -52,6 +52,21 @@
     .draggable-element.selected {
         border-color: #007bff;
     }
+    .resize-handle {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #007bff;
+        border: 1px solid white;
+        display: none;
+    }
+    .draggable-element.selected .resize-handle {
+        display: block;
+    }
+    .resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+    .resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+    .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+    .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
     .draggable-element.text {
         min-width: 100px;
         min-height: 30px;
@@ -171,7 +186,10 @@
 let currentPageId = {{ pages[0].id if pages else 'null' }};
 let selectedElement = null;
 let isDragging = false;
+let isResizing = false;
 let dragOffset = { x: 0, y: 0 };
+let resizeStart = { x: 0, y: 0, width: 0, height: 0 };
+let resizeHandle = null;
 let elements = [];
 
 const pageCanvas = document.getElementById('pageCanvas');
@@ -200,29 +218,44 @@ function addElement(type, options = {}) {
             img.src = options.src;
             img.style.width = '100%';
             img.style.height = '100%';
+            img.style.objectFit = 'cover';
             element.appendChild(img);
         } else {
             element.innerHTML = '<span>Click to upload image</span>';
             element.addEventListener('click', () => {
-                if (!isDragging) {
+                if (!isDragging && !isResizing) {
                     selectedElement = element;
                     imageUpload.click();
                 }
             });
         }
+        // Add resize handles for images
+        addResizeHandles(element);
     } else if (type === 'shape') {
         element.style.background = options.color || '#007bff';
         element.style.borderRadius = options.shape === 'circle' ? '50%' : '0';
+        // Add resize handles for shapes
+        addResizeHandles(element);
     }
 
     element.style.left = options.x || '50px';
     element.style.top = options.y || '50px';
-    element.style.width = options.width || (type === 'text' ? 'auto' : '100px');
-    element.style.height = options.height || (type === 'text' ? 'auto' : '100px');
+    element.style.width = options.width || (type === 'text' ? 'auto' : '150px');
+    element.style.height = options.height || (type === 'text' ? 'auto' : '150px');
 
     element.addEventListener('mousedown', startDrag);
     pageCanvas.appendChild(element);
     elements.push(element);
+}
+
+function addResizeHandles(element) {
+    const handles = ['nw', 'ne', 'sw', 'se'];
+    handles.forEach(pos => {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle ${pos}`;
+        handle.addEventListener('mousedown', (e) => startResize(e, element, pos));
+        element.appendChild(handle);
+    });
 }
 
 function startDrag(e) {
@@ -271,6 +304,70 @@ function stopDrag() {
     document.removeEventListener('mouseup', stopDrag);
 }
 
+function startResize(e, element, handle) {
+    e.stopPropagation();
+    isResizing = true;
+    selectedElement = element;
+    resizeHandle = handle;
+
+    document.querySelectorAll('.draggable-element').forEach(el => {
+        el.classList.remove('selected');
+    });
+    element.classList.add('selected');
+
+    resizeStart.x = e.clientX;
+    resizeStart.y = e.clientY;
+    resizeStart.width = element.offsetWidth;
+    resizeStart.height = element.offsetHeight;
+
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
+    e.preventDefault();
+}
+
+function resize(e) {
+    if (!isResizing) return;
+
+    const dx = e.clientX - resizeStart.x;
+    const dy = e.clientY - resizeStart.y;
+
+    let newWidth = resizeStart.width;
+    let newHeight = resizeStart.height;
+
+    // Handle different resize directions
+    if (resizeHandle.includes('e')) {
+        newWidth = Math.max(50, resizeStart.width + dx);
+    }
+    if (resizeHandle.includes('w')) {
+        newWidth = Math.max(50, resizeStart.width - dx);
+        if (newWidth !== resizeStart.width - dx) {
+            // Hit minimum width
+        } else {
+            selectedElement.style.left = (selectedElement.offsetLeft + dx) + 'px';
+        }
+    }
+    if (resizeHandle.includes('s')) {
+        newHeight = Math.max(50, resizeStart.height + dy);
+    }
+    if (resizeHandle.includes('n')) {
+        newHeight = Math.max(50, resizeStart.height - dy);
+        if (newHeight !== resizeStart.height - dy) {
+            // Hit minimum height
+        } else {
+            selectedElement.style.top = (selectedElement.offsetTop + dy) + 'px';
+        }
+    }
+
+    selectedElement.style.width = newWidth + 'px';
+    selectedElement.style.height = newHeight + 'px';
+}
+
+function stopResize() {
+    isResizing = false;
+    document.removeEventListener('mousemove', resize);
+    document.removeEventListener('mouseup', stopResize);
+}
+
 imageUpload.addEventListener('change', (e) => {
     if (e.target.files && e.target.files[0] && selectedElement) {
         const formData = new FormData();
@@ -288,7 +385,12 @@ imageUpload.addEventListener('change', (e) => {
                 img.src = data.url;
                 img.style.width = '100%';
                 img.style.height = '100%';
+                img.style.objectFit = 'cover';
                 selectedElement.appendChild(img);
+                // Add resize handles after uploading
+                if (!selectedElement.querySelector('.resize-handle')) {
+                    addResizeHandles(selectedElement);
+                }
             }
         });
     }
