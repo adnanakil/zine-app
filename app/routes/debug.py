@@ -62,6 +62,7 @@ def debug_firebase():
     # Try to decode the base64 key (fallback method)
     private_key_base64 = os.getenv('FIREBASE_PRIVATE_KEY_BASE64', '')
     if private_key_base64:
+        debug_info['decoding'] = {}
         debug_info['decoding']['base64_found'] = True
         debug_info['decoding']['base64_length'] = len(private_key_base64)
 
