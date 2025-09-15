@@ -6,6 +6,7 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -72,5 +73,53 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+
+        # Create demo data if database is empty (for Vercel)
+        from app.models import User, Zine, Page
+        if not User.query.first():
+            # Create demo user
+            demo_user = User(
+                username='dev',
+                email='dev@archgest.com',
+                firebase_uid='demo_user_firebase_uid'
+            )
+            demo_user.set_password('demo123')
+            db.session.add(demo_user)
+            db.session.commit()
+
+            # Create demo zine
+            demo_zine = Zine(
+                creator_id=demo_user.id,
+                title='BestBest',
+                slug='bestbest',
+                description='A sample zine',
+                status='published',
+                published_at=datetime.utcnow()
+            )
+            db.session.add(demo_zine)
+            db.session.commit()
+
+            # Create demo page
+            demo_page = Page(
+                zine_id=demo_zine.id,
+                order=0,
+                content={
+                    'blocks': [
+                        {
+                            'type': 'shape',
+                            'x': '150px',
+                            'y': '200px',
+                            'width': '100px',
+                            'height': '100px',
+                            'style': {
+                                'background': '#4CAF50',
+                                'borderRadius': '0'
+                            }
+                        }
+                    ]
+                }
+            )
+            db.session.add(demo_page)
+            db.session.commit()
 
     return app
