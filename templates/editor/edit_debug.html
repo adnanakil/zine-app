@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Editor Debug</title>
+</head>
+<body>
+    <h1>Editor Debug Page</h1>
+    <p>Zine ID: <strong id="zineId">{{ zine.id }}</strong></p>
+    <p>Zine Title: {{ zine.title }}</p>
+
+    <h2>Test Buttons:</h2>
+    <button onclick="testSave()">Test Save</button>
+    <button onclick="testPublish()">Test Publish</button>
+
+    <div id="results"></div>
+
+    <script>
+        const zineId = document.getElementById('zineId').textContent;
+        const resultsDiv = document.getElementById('results');
+
+        function log(message) {
+            resultsDiv.innerHTML += '<p>' + message + '</p>';
+            console.log(message);
+        }
+
+        function testSave() {
+            log('Testing save with zine ID: ' + zineId);
+
+            fetch(`/editor/${zineId}/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    page_id: null,
+                    content: { blocks: [] }
+                })
+            })
+            .then(res => {
+                log('Save response status: ' + res.status);
+                return res.json();
+            })
+            .then(data => {
+                log('Save response: ' + JSON.stringify(data));
+            })
+            .catch(err => {
+                log('Save error: ' + err);
+            });
+        }
+
+        function testPublish() {
+            log('Testing publish with zine ID: ' + zineId);
+
+            fetch(`/editor/${zineId}/publish`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    visibility: 'public',
+                    tags: []
+                })
+            })
+            .then(res => {
+                log('Publish response status: ' + res.status);
+                return res.json();
+            })
+            .then(data => {
+                log('Publish response: ' + JSON.stringify(data));
+            })
+            .catch(err => {
+                log('Publish error: ' + err);
+            });
+        }
+    </script>
+</body>
+</html>

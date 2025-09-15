@@ -108,6 +108,24 @@ def create_zine():
 
         return redirect(url_for('editor.edit', zine_id=zine.id))
 
+@bp.route('/<zine_id>/debug')
+@login_required
+def edit_debug(zine_id):
+    """Debug endpoint to test editor functionality"""
+    if use_firestore():
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine:
+            return "Zine not found", 404
+
+        class ZineObj:
+            def __init__(self, data):
+                self.__dict__.update(data)
+
+        zine_obj = ZineObj(zine)
+        return render_template('editor/edit_debug.html', zine=zine_obj)
+    else:
+        return "Debug only available for Firestore", 400
+
 @bp.route('/<zine_id>')
 @login_required
 def edit(zine_id):
