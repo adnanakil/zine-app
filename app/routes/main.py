@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, current_app
 from flask_login import current_user, login_required
 from app.models import Zine, User, Tag, Analytics, Notification
 from app import db
@@ -98,3 +98,7 @@ def search():
     ).limit(20).all()
 
     return render_template('search.html', query=query, zines=zines, creators=creators)
+
+@bp.route('/test-firebase')
+def test_firebase():
+    return render_template('test_firebase.html', firebase_config=current_app.config['FIREBASE_CONFIG'])

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Test</title>
+</head>
+<body>
+    <h1>Firebase Test Page</h1>
+    <div id="status">Initializing Firebase...</div>
+    <div id="config"></div>
+    <div id="errors" style="color: red;"></div>
+
+    <script>
+        const firebaseConfig = {{ firebase_config | tojson }};
+
+        // Display config
+        document.getElementById('config').innerHTML = '<pre>' + JSON.stringify(firebaseConfig, null, 2) + '</pre>';
+
+        // Load Firebase
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.textContent = `
+            import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+            import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+            try {
+                const app = initializeApp(${JSON.stringify(firebaseConfig)});
+                const auth = getAuth(app);
+                document.getElementById('status').innerHTML = '✅ Firebase initialized successfully!';
+                console.log('Firebase app:', app);
+                console.log('Firebase auth:', auth);
+            } catch (error) {
+                document.getElementById('status').innerHTML = '❌ Firebase initialization failed';
+                document.getElementById('errors').innerHTML = error.message;
+                console.error('Firebase error:', error);
+            }
+        `;
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>
