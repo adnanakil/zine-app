@@ -3,27 +3,44 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 from datetime import datetime
 
-# Try to import Firestore, fall back to SQLAlchemy if not available
+# Always import both systems to avoid import errors
+from app.models import Zine, User, Tag, Analytics, Notification
+from app import db
+
+# Try to import Firestore
 try:
     from app.firestore_db import firestore_db
-    # Check if Firestore is actually available (API enabled, etc.)
-    USE_FIRESTORE = firestore_db.is_available()
-    if not USE_FIRESTORE:
-        print("Firestore not available, using SQLAlchemy")
-        from app.models import Zine, User, Tag, Analytics, Notification
-        from app import db
+    # Don't check availability at import time - do it dynamically
+    USE_FIRESTORE = None  # Will be determined per request
 except Exception as e:
     print(f"Firestore import failed: {e}")
-    from app.models import Zine, User, Tag, Analytics, Notification
-    from app import db
+    firestore_db = None
     USE_FIRESTORE = False
+
+def use_firestore():
+    """Dynamically check if Firestore should be used"""
+    global USE_FIRESTORE
+    if USE_FIRESTORE is not None:
+        return USE_FIRESTORE
+
+    if firestore_db is None:
+        USE_FIRESTORE = False
+        return False
+
+    try:
+        USE_FIRESTORE = firestore_db.is_available()
+        return USE_FIRESTORE
+    except Exception as e:
+        print(f"Error checking Firestore availability: {e}")
+        USE_FIRESTORE = False
+        return False
 
 bp = Blueprint('main', __name__)
 
 @bp.route('/')
 def index():
     if current_user.is_authenticated:
-        if USE_FIRESTORE:
+        if use_firestore():
             # Get following list and their recent zines
             following = firestore_db.get_following(current_user.id)
             feed_zines = []
@@ -53,7 +70,7 @@ def index():
             feed_zines = current_user.get_feed().limit(20).all()
             return render_template('index.html', zines=feed_zines, feed=True)
     else:
-        if USE_FIRESTORE:
+        if use_firestore():
             # Get featured zines sorted by views count
             featured_zines = firestore_db.get_published_zines(limit=50)
             # Sort by views_count
@@ -83,7 +100,7 @@ def explore():
     category = request.args.get('category')
     search = request.args.get('search')
 
-    if USE_FIRESTORE:
+    if use_firestore():
         # Get all published zines
         zines = firestore_db.get_published_zines(limit=50)
 
@@ -129,7 +146,7 @@ def explore():
 @bp.route('/notifications')
 @login_required
 def notifications():
-    if USE_FIRESTORE:
+    if use_firestore():
         # Note: Notifications not yet implemented for Firestore
         notifications = []
         return render_template('notifications.html', notifications=notifications)
@@ -143,7 +160,7 @@ def notifications():
 @bp.route('/follow/<int:user_id>')
 @login_required
 def follow(user_id):
-    if USE_FIRESTORE:
+    if use_firestore():
         user = firestore_db.get_user_by_id(str(user_id))
         if not user or user['id'] == current_user.id:
             return redirect(request.referrer or url_for('main.index'))
@@ -175,7 +192,7 @@ def follow(user_id):
 @bp.route('/unfollow/<int:user_id>')
 @login_required
 def unfollow(user_id):
-    if USE_FIRESTORE:
+    if use_firestore():
         user = firestore_db.get_user_by_id(str(user_id))
         if user:
             firestore_db.unfollow_user(current_user.id, str(user_id))
@@ -193,7 +210,7 @@ def search():
     if not query:
         return redirect(url_for('main.explore'))
 
-    if USE_FIRESTORE:
+    if use_firestore():
         # Get all published zines and filter by search
         all_zines = firestore_db.get_published_zines(limit=100)
         query_lower = query.lower()
@@ -255,7 +272,7 @@ def health_check():
         }
     }
 
-    if USE_FIRESTORE:
+    if use_firestore():
         try:
             # Test Firestore connection
             firestore_db.is_available()

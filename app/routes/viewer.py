@@ -6,20 +6,37 @@ import io
 import base64
 import uuid
 
-# Try to import Firestore, fall back to SQLAlchemy if not available
+# Always import both systems to avoid import errors
+from app.models import User, Zine, Page, Analytics
+from app import db
+
+# Try to import Firestore
 try:
     from app.firestore_db import firestore_db
-    # Check if Firestore is actually available (API enabled, etc.)
-    USE_FIRESTORE = firestore_db.is_available()
-    if not USE_FIRESTORE:
-        print("Firestore not available, using SQLAlchemy")
-        from app.models import User, Zine, Page, Analytics
-        from app import db
+    # Don't check availability at import time - do it dynamically
+    USE_FIRESTORE = None  # Will be determined per request
 except Exception as e:
     print(f"Firestore import failed: {e}")
-    from app.models import User, Zine, Page, Analytics
-    from app import db
+    firestore_db = None
     USE_FIRESTORE = False
+
+def use_firestore():
+    """Dynamically check if Firestore should be used"""
+    global USE_FIRESTORE
+    if USE_FIRESTORE is not None:
+        return USE_FIRESTORE
+
+    if firestore_db is None:
+        USE_FIRESTORE = False
+        return False
+
+    try:
+        USE_FIRESTORE = firestore_db.is_available()
+        return USE_FIRESTORE
+    except Exception as e:
+        print(f"Error checking Firestore availability: {e}")
+        USE_FIRESTORE = False
+        return False
 
 bp = Blueprint('viewer', __name__)
 
@@ -97,7 +114,7 @@ def demo_zine():
 
 @bp.route('/<username>')
 def creator_profile(username):
-    if USE_FIRESTORE:
+    if use_firestore():
         creator = firestore_db.get_user_by_username(username)
         if not creator:
             abort(404)
@@ -130,7 +147,7 @@ def creator_profile(username):
 
 @bp.route('/<username>/<slug>')
 def view_zine(username, slug):
-    if USE_FIRESTORE:
+    if use_firestore():
         creator = firestore_db.get_user_by_username(username)
         if not creator:
             abort(404)
@@ -185,7 +202,7 @@ def view_zine(username, slug):
 
     is_following = False
 
-    if USE_FIRESTORE:
+    if use_firestore():
         if current_user.is_authenticated:
             is_following = firestore_db.is_following(current_user.id, creator['id'])
 
@@ -238,7 +255,7 @@ def track_read_time():
     session_id = request.cookies.get('session_id')
 
     if zine_id and read_time and session_id:
-        if USE_FIRESTORE:
+        if use_firestore():
             firestore_db.track_read_time(zine_id, session_id, read_time)
         # SQLAlchemy doesn't need special handling here
 
