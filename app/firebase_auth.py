@@ -25,8 +25,10 @@ def init_firebase():
                 try:
                     private_key = base64.b64decode(private_key_base64).decode('utf-8')
                     print("Using base64 encoded private key")
+                    print(f"Private key starts with: {private_key[:30] if private_key else 'EMPTY'}")
                 except Exception as e:
                     print(f"Error decoding base64 key: {e}")
+                    print(f"Base64 key length: {len(private_key_base64)}")
                     private_key = ''
             else:
                 # Fallback to direct private key
@@ -65,6 +67,10 @@ def init_firebase():
                 # Development mode without Firebase Admin SDK
                 print("\n" + "="*60)
                 print("Firebase Admin SDK not configured (this is OK for development)")
+                print(f"Missing fields:")
+                print(f"  project_id: {bool(firebase_config.get('project_id'))}")
+                print(f"  private_key: {bool(firebase_config.get('private_key'))}")
+                print(f"  client_email: {bool(firebase_config.get('client_email'))}")
                 print("Frontend authentication will still work with Firebase")
                 print("To enable backend verification, add serviceAccountKey.json")
                 print("="*60 + "\n")
