@@ -39,8 +39,14 @@ def index():
             class ZineObj:
                 def __init__(self, data):
                     self.__dict__.update(data)
+                    # Add creator property
+                    creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
+                    if creator_data:
+                        self.creator = type('Creator', (), creator_data)()
+                    else:
+                        self.creator = None
 
-            feed_zines_objs = [ZineObj(z) for z in feed_zines]
+            feed_zines_objs = [ZineObj(z) for z in feed_zines if z]
             return render_template('index.html', zines=feed_zines_objs, feed=True)
         else:
             # SQLAlchemy fallback
@@ -58,8 +64,14 @@ def index():
             class ZineObj:
                 def __init__(self, data):
                     self.__dict__.update(data)
+                    # Add creator property
+                    creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
+                    if creator_data:
+                        self.creator = type('Creator', (), creator_data)()
+                    else:
+                        self.creator = None
 
-            featured_zines_objs = [ZineObj(z) for z in featured_zines]
+            featured_zines_objs = [ZineObj(z) for z in featured_zines if z]
             return render_template('index.html', zines=featured_zines_objs, feed=False)
         else:
             # SQLAlchemy fallback
