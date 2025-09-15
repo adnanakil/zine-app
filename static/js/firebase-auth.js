@@ -10,10 +10,17 @@ function initializeFirebase(config) {
         return;
     }
 
-    // Debug: Log configuration (sanitized)
+    // Debug: Log configuration (sanitized) - Updated for clean env vars
     console.log('Initializing Firebase with config:', {
         ...config,
         apiKey: config.apiKey ? config.apiKey.substring(0, 10) + '...' : 'missing'
+    });
+
+    // Check for whitespace issues in config values
+    Object.keys(config).forEach(key => {
+        if (typeof config[key] === 'string' && config[key].includes('\n')) {
+            console.warn(`Firebase config ${key} contains newlines:`, config[key]);
+        }
     });
 
     // Load Firebase v9+ SDK modules dynamically
