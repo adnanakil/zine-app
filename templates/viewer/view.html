@@ -9,6 +9,13 @@
         margin: 0 auto;
         padding: 20px;
     }
+    @media (max-width: 768px) {
+        .viewer-container {
+            padding: 0;
+            margin: 0;
+            max-width: 100%;
+        }
+    }
     .viewer-header {
         text-align: center;
         margin-bottom: 30px;
@@ -30,6 +37,21 @@
         max-width: 100%;
         max-height: 100%;
     }
+    @media (max-width: 768px) {
+        /* Mobile: true full-screen */
+        .page-viewer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            box-shadow: none;
+            border-radius: 0;
+        }
+    }
     @media (min-width: 769px) {
         /* Desktop: show phone-sized preview */
         .page-viewer {
@@ -42,7 +64,8 @@
         position: relative;
         width: 100%;
         height: 100%;
-        padding: 20px;
+        padding: 0;
+        overflow: hidden;
     }
     .page-element {
         position: absolute;
@@ -50,7 +73,26 @@
     .page-element.text {
         padding: 10px;
     }
+    .page-element.image {
+        padding: 0;
+    }
     .page-element.image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    /* Full-screen image elements */
+    .page-element.image[style*="width: 100%"][style*="height: 100%"] {
+        position: absolute;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0;
+        bottom: 0;
+        width: 100% !important;
+        height: 100% !important;
+        padding: 0 !important;
+    }
+    .page-element.image[style*="width: 100%"][style*="height: 100%"] img {
         width: 100%;
         height: 100%;
         object-fit: cover;
@@ -87,6 +129,16 @@
         justify-content: center;
         margin-bottom: 20px;
     }
+    @media (max-width: 768px) {
+        .viewer-header,
+        .mode-toggle {
+            display: none;
+        }
+        .scroll-mode .viewer-header:first-child,
+        .scroll-mode .mode-toggle:first-child {
+            display: block;
+        }
+    }
     .scroll-mode .page-viewer {
         margin-bottom: 20px;
     }
@@ -120,7 +172,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="viewer-container">
+<div class="viewer-container" id="viewerContainer">
     <div class="viewer-header">
         <h1>{{ zine.title }}</h1>
         {% if zine.description %}
@@ -322,6 +374,11 @@ let currentMode = 'scroll';
 let currentPage = 1;
 const totalPages = {{ pages|length }};
 let readStartTime = Date.now();
+
+// Add full-screen class on mobile
+if (window.innerWidth <= 768) {
+    document.body.classList.add('viewing-zine');
+}
 
 const viewerContent = document.getElementById('viewerContent');
 const pageNav = document.querySelector('.page-navigation');

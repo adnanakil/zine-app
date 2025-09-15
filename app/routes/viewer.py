@@ -48,11 +48,11 @@ def demo_zine():
                 },
                 {
                     "type": "text",
-                    "content": "<h1 style='color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>Welcome to Zines!</h1><p style='color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);'>Express yourself through beautiful digital publications</p>",
+                    "content": "<h1 style='color: white; text-shadow: 2px 2px 8px rgba(0,0,0,0.9); font-size: 2.5em; margin-bottom: 10px;'>Welcome to Zines!</h1><p style='color: white; text-shadow: 2px 2px 6px rgba(0,0,0,0.9); font-size: 1.2em;'>Express yourself through beautiful digital publications</p>",
                     "x": 20,
-                    "y": 50,
-                    "width": 360,
-                    "height": 150
+                    "y": 80,
+                    "width": "90%",
+                    "height": 200
                 }
             ]
         }),

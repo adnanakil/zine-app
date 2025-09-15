@@ -344,6 +344,10 @@ body {
 /* Full-screen mobile zine experience */
 @media (max-width: 768px) {
     /* Full-screen viewer on mobile */
+    body.viewing-zine {
+        overflow: hidden;
+    }
+
     .viewer-container {
         padding: 0;
         margin: 0;
@@ -352,16 +356,23 @@ body {
     }
 
     .viewer-container .page-viewer {
+        position: fixed;
+        top: 0;
+        left: 0;
         width: 100vw;
         height: 100vh;
         border-radius: 0;
         box-shadow: none;
         margin: 0;
+        z-index: 9999;
     }
 
     /* Hide navigation in viewer on mobile */
     body.viewing-zine .navbar,
-    body.viewing-zine .footer {
+    body.viewing-zine .footer,
+    body.viewing-zine .viewer-header,
+    body.viewing-zine .mode-toggle,
+    body.viewing-zine .attribution {
         display: none;
     }
 
