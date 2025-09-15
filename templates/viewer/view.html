@@ -205,7 +205,8 @@
         {% endif %}
 
         <div class="share-buttons">
-            <button onclick="navigator.share({title: '{{ zine.title }}', url: '{{ request.url }}'})" class="btn-secondary">Share</button>
+            <button onclick="shareZine()" class="btn-secondary">Share</button>
+            <button onclick="copyLink()" class="btn-secondary">Copy Link</button>
         </div>
     </div>
 </div>
@@ -214,6 +215,105 @@
 
 {% block extra_js %}
 <script>
+// Share functionality
+function shareZine() {
+    const shareData = {
+        title: '{{ zine.title }} by {{ creator.username }}',
+        text: '{{ zine.description or "Check out this zine!" }}',
+        url: window.location.href
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        navigator.share(shareData)
+            .then(() => console.log('Shared successfully'))
+            .catch((error) => {
+                console.log('Error sharing:', error);
+                copyLink(); // Fallback to copy link
+            });
+    } else {
+        // Fallback for browsers that don't support Web Share API
+        copyLink();
+    }
+}
+
+function copyLink() {
+    const url = window.location.href;
+
+    // Try using the Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+            .then(() => {
+                showNotification('Link copied to clipboard!');
+            })
+            .catch(() => {
+                fallbackCopyLink(url);
+            });
+    } else {
+        fallbackCopyLink(url);
+    }
+}
+
+function fallbackCopyLink(url) {
+    // Fallback method using a temporary input element
+    const input = document.createElement('input');
+    input.value = url;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile devices
+
+    try {
+        document.execCommand('copy');
+        showNotification('Link copied to clipboard!');
+    } catch (err) {
+        showNotification('Failed to copy link. URL: ' + url);
+    }
+
+    document.body.removeChild(input);
+}
+
+function showNotification(message) {
+    // Create a notification element
+    const notification = document.createElement('div');
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #333;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 4px;
+        z-index: 10000;
+        animation: slideUp 0.3s ease;
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'slideDown 0.3s ease';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Add CSS animation for notifications
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideUp {
+        from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
+    }
+    @keyframes slideDown {
+        from { transform: translateX(-50%) translateY(0); opacity: 1; }
+        to { transform: translateX(-50%) translateY(100%); opacity: 0; }
+    }
+`;
+document.head.appendChild(style);
+
 let currentMode = 'scroll';
 let currentPage = 1;
 const totalPages = {{ pages|length }};

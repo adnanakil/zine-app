@@ -9,6 +9,62 @@ import base64
 
 bp = Blueprint('viewer', __name__)
 
+@bp.route('/demo/sample-zine')
+def demo_zine():
+    """Demo zine for testing when database is empty"""
+    # Create a demo zine object
+    class DemoZine:
+        title = "Sample Zine"
+        description = "This is a demo zine to showcase the viewer"
+        slug = "sample-zine"
+        views_count = 42
+        likes_count = 10
+        unique_readers = 25
+        format = "A5"
+        id = 1
+
+    class DemoCreator:
+        username = "demo"
+        bio = "Demo creator account"
+        id = 1
+
+    class DemoPage:
+        def __init__(self, order, content):
+            self.order = order
+            self.content = content
+
+    zine = DemoZine()
+    creator = DemoCreator()
+    pages = [
+        DemoPage(1, {
+            "elements": [
+                {
+                    "type": "text",
+                    "content": "<h1>Welcome to Zines!</h1><p>This is a demo zine to show how the viewer works.</p>",
+                    "x": 50,
+                    "y": 100,
+                    "width": 300,
+                    "height": 200
+                }
+            ]
+        }),
+        DemoPage(2, {
+            "elements": [
+                {
+                    "type": "text",
+                    "content": "<h2>Create Your Own</h2><p>Sign up to create and share your own digital zines!</p>",
+                    "x": 50,
+                    "y": 50,
+                    "width": 300,
+                    "height": 150
+                }
+            ]
+        })
+    ]
+
+    is_following = False
+    return render_template('viewer/view.html', zine=zine, creator=creator, pages=pages, is_following=is_following)
+
 @bp.route('/<username>')
 def creator_profile(username):
     creator = User.query.filter_by(username=username).first_or_404()
