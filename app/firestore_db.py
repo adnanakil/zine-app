@@ -130,18 +130,20 @@ class FirestoreDB:
         query = self._get_db().collection('zines').where('creator_id', '==', creator_id)
         if status:
             query = query.where('status', '==', status)
-        from firebase_admin import firestore
-        query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-        return [doc.to_dict() for doc in query.get()]
+        # Get all zines and sort in Python to avoid composite index
+        zines = [doc.to_dict() for doc in query.get()]
+        # Sort by created_at descending
+        return sorted(zines, key=lambda x: x.get('created_at', datetime.min), reverse=True)
 
     def get_published_zines(self, limit=20):
         """Get recently published zines"""
-        from firebase_admin import firestore
         query = self._get_db().collection('zines')\
-            .where('status', '==', 'published')\
-            .order_by('published_at', direction=firestore.Query.DESCENDING)\
-            .limit(limit)
-        return [doc.to_dict() for doc in query.get()]
+            .where('status', '==', 'published')
+        # Get all published zines and sort in Python to avoid composite index
+        zines = [doc.to_dict() for doc in query.get()]
+        # Sort by published_at descending and limit
+        sorted_zines = sorted(zines, key=lambda x: x.get('published_at', datetime.min), reverse=True)
+        return sorted_zines[:limit]
 
     def update_zine(self, zine_id, data):
         """Update zine data"""
