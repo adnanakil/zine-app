@@ -35,15 +35,15 @@ def create_app():
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 
-    # Firebase config for frontend
+    # Firebase config for frontend (strip whitespace from all values)
     app.config['FIREBASE_CONFIG'] = {
-        'apiKey': os.getenv('FIREBASE_API_KEY'),
-        'authDomain': os.getenv('FIREBASE_AUTH_DOMAIN'),
-        'projectId': os.getenv('FIREBASE_PROJECT_ID'),
-        'storageBucket': os.getenv('FIREBASE_STORAGE_BUCKET'),
-        'messagingSenderId': os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
-        'appId': os.getenv('FIREBASE_APP_ID'),
-        'measurementId': os.getenv('FIREBASE_MEASUREMENT_ID')
+        'apiKey': (os.getenv('FIREBASE_API_KEY') or '').strip(),
+        'authDomain': (os.getenv('FIREBASE_AUTH_DOMAIN') or '').strip(),
+        'projectId': (os.getenv('FIREBASE_PROJECT_ID') or '').strip(),
+        'storageBucket': (os.getenv('FIREBASE_STORAGE_BUCKET') or '').strip(),
+        'messagingSenderId': (os.getenv('FIREBASE_MESSAGING_SENDER_ID') or '').strip(),
+        'appId': (os.getenv('FIREBASE_APP_ID') or '').strip(),
+        'measurementId': (os.getenv('FIREBASE_MEASUREMENT_ID') or '').strip()
     }
 
     db.init_app(app)
