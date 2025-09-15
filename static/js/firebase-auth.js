@@ -62,42 +62,50 @@ function initializeFirebase(config) {
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getAnalytics, logEvent } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js';
 
+        let auth = null;
+        let analytics = null;
+        let initError = null;
+
         try {
             // Initialize Firebase
             const app = initializeApp(${JSON.stringify(config)});
-            const auth = getAuth(app);
-            const analytics = ${config.measurementId ? `getAnalytics(app)` : 'null'};
+            auth = getAuth(app);
+            analytics = ${config.measurementId ? `getAnalytics(app)` : 'null'};
 
             console.log('Firebase app initialized successfully');
         } catch (error) {
             console.error('Firebase initialization error:', error);
-            window.firebaseInitError = error;
-            return;
+            initError = error;
         }
 
-        // Make auth functions available globally
-        window.firebaseAuth = {
-            auth,
-            analytics,
-            createUserWithEmailAndPassword,
-            signInWithEmailAndPassword,
-            signInWithPopup,
-            GoogleAuthProvider,
-            signOut: firebaseSignOut,
-            onAuthStateChanged,
-            updateProfile,
-            logEvent: ${config.measurementId ? 'logEvent' : '() => {}'}
-        };
+        // Only set up auth if initialization succeeded
+        if (auth) {
+            // Make auth functions available globally
+            window.firebaseAuth = {
+                auth,
+                analytics,
+                createUserWithEmailAndPassword,
+                signInWithEmailAndPassword,
+                signInWithPopup,
+                GoogleAuthProvider,
+                signOut: firebaseSignOut,
+                onAuthStateChanged,
+                updateProfile,
+                logEvent: ${config.measurementId ? 'logEvent' : '() => {}'}
+            };
 
-        // Set up auth state observer
-        onAuthStateChanged(auth, (user) => {
-            window.currentFirebaseUser = user;
-            if (user) {
-                window.handleUserSignedIn(user);
-            } else {
-                window.handleUserSignedOut();
-            }
-        });
+            // Set up auth state observer
+            onAuthStateChanged(auth, (user) => {
+                window.currentFirebaseUser = user;
+                if (user) {
+                    window.handleUserSignedIn(user);
+                } else {
+                    window.handleUserSignedOut();
+                }
+            });
+        } else {
+            window.firebaseInitError = initError || new Error('Failed to initialize Firebase');
+        }
     `;
     document.head.appendChild(script);
 
