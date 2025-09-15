@@ -59,22 +59,38 @@ def create_app():
     firebase_app = init_firebase()
 
     # Initialize Firestore database with demo data only if Firebase is configured
+    firestore_available = False
     try:
         if firebase_app:  # Only use Firestore if Firebase Admin SDK is initialized
-            print("Firebase app initialized, attempting Firestore connection...")
+            print("\n" + "="*60)
+            print("CHECKING FIRESTORE AVAILABILITY")
+            print("="*60)
             from app.firestore_db import firestore_db
             if firestore_db.is_available():
+                firestore_available = True
                 firestore_db.init_demo_data()
-                print("Firestore initialized successfully")
+                print("✅ Firestore initialized successfully")
+                print("="*60 + "\n")
             else:
-                print("Firestore API not enabled - using SQLAlchemy only")
+                print("❌ Firestore API not enabled or not accessible")
+                print("Using SQLAlchemy with in-memory database")
+                print("WARNING: This will cause intermittent 404s on Vercel!")
+                print("="*60 + "\n")
         else:
-            print("Firebase not configured - using SQLAlchemy only")
+            print("\n" + "="*60)
+            print("❌ Firebase not configured - using SQLAlchemy only")
+            print("WARNING: This will cause intermittent 404s on Vercel!")
+            print("="*60 + "\n")
     except Exception as e:
-        print(f"Error initializing Firestore: {e}")
+        print(f"\n❌ Error initializing Firestore: {e}")
         print("Falling back to SQLAlchemy database")
+        print("WARNING: This will cause intermittent 404s on Vercel!")
         import traceback
         traceback.print_exc()
+        print("="*60 + "\n")
+
+    # Store Firestore availability in app config for easy access
+    app.config['FIRESTORE_AVAILABLE'] = firestore_available
 
     from app.models import User
 

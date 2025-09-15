@@ -16,18 +16,42 @@ class FirestoreDB:
     def _get_db(self):
         """Lazy initialization of Firestore client with availability check"""
         if self.db is None:
+            print("\nAttempting Firestore connection...")
             try:
+                # Check if Firebase Admin SDK is initialized
+                import firebase_admin
+                try:
+                    app = firebase_admin.get_app()
+                    print(f"Firebase app found: {app.name}")
+                except ValueError:
+                    print("❌ Firebase Admin SDK not initialized")
+                    self._available = False
+                    raise Exception("Firebase Admin SDK not initialized")
+
                 from firebase_admin import firestore
                 self.db = firestore.client()
-                # Test if Firestore is available
+                print("Firestore client created")
+
+                # Test if Firestore is actually available
                 test_ref = self.db.collection('_test').document('_test')
-                test_ref.set({'test': True})
-                test_ref.delete()
-                self._available = True
-                print("Firestore is available and working")
+                test_ref.set({'test': True, 'timestamp': datetime.now()})
+                test_doc = test_ref.get()
+                if test_doc.exists:
+                    print("✅ Firestore test write/read successful")
+                    test_ref.delete()
+                    self._available = True
+                    print("✅ Firestore is available and working")
+                else:
+                    print("❌ Firestore test document not found")
+                    self._available = False
+                    raise Exception("Firestore test failed")
+
             except Exception as e:
-                print(f"Firestore is not available: {e}")
+                print(f"❌ Firestore connection failed: {e}")
+                print(f"   Error type: {type(e).__name__}")
                 self._available = False
+                import traceback
+                traceback.print_exc()
                 raise
         return self.db
 
