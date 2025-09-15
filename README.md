@@ -1,6 +1,8 @@
 # Zine Social Network
 
-A minimalist zine-making and distribution platform built with Flask and SQLite, designed for deployment on Vercel.
+A minimalist zine-making and distribution platform built with Flask and Firebase Firestore, designed for deployment on Vercel.
+
+**Status:** Firebase Firestore integration complete - Dec 2024
 
 ## Features
 
