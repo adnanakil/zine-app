@@ -183,9 +183,10 @@ class FirestoreDB:
     def get_zine_pages(self, zine_id):
         """Get all pages for a zine"""
         query = self._get_db().collection('pages')\
-            .where('zine_id', '==', zine_id)\
-            .order_by('order')
-        return [doc.to_dict() for doc in query.get()]
+            .where('zine_id', '==', zine_id)
+        pages = [doc.to_dict() for doc in query.get()]
+        # Sort by order in Python to avoid needing a composite index
+        return sorted(pages, key=lambda x: x.get('order', 0))
 
     def update_page(self, page_id, data):
         """Update page data"""
