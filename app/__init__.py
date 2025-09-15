@@ -56,14 +56,18 @@ def create_app():
     login_manager.login_view = 'auth.login'
 
     from app.firebase_auth import init_firebase
-    init_firebase()
+    firebase_app = init_firebase()
 
-    # Initialize Firestore database with demo data
-    from app.firestore_db import firestore_db
+    # Initialize Firestore database with demo data only if Firebase is configured
     try:
-        firestore_db.init_demo_data()
+        if firebase_app:  # Only use Firestore if Firebase Admin SDK is initialized
+            from app.firestore_db import firestore_db
+            firestore_db.init_demo_data()
+        else:
+            print("Firebase not configured - using SQLAlchemy only")
     except Exception as e:
-        print(f"Error initializing Firestore demo data: {e}")
+        print(f"Error initializing Firestore: {e}")
+        print("Falling back to SQLAlchemy database")
 
     from app.models import User
     from app.firestore_models import FirestoreUser

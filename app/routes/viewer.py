@@ -1,11 +1,20 @@
 from flask import Blueprint, render_template, request, jsonify, abort, make_response, url_for
 from flask_login import current_user
-from app.firestore_db import firestore_db
 from datetime import datetime
 import qrcode
 import io
 import base64
 import uuid
+
+# Try to import Firestore, fall back to SQLAlchemy if not available
+try:
+    from app.firestore_db import firestore_db
+    USE_FIRESTORE = True
+except Exception as e:
+    print(f"Firestore not available: {e}")
+    from app.models import User, Zine, Page, Analytics
+    from app import db
+    USE_FIRESTORE = False
 
 bp = Blueprint('viewer', __name__)
 
@@ -83,53 +92,83 @@ def demo_zine():
 
 @bp.route('/<username>')
 def creator_profile(username):
-    creator = firestore_db.get_user_by_username(username)
-    if not creator:
-        abort(404)
+    if USE_FIRESTORE:
+        creator = firestore_db.get_user_by_username(username)
+        if not creator:
+            abort(404)
 
-    zines = firestore_db.get_user_zines(creator['id'], status='published')
+        zines = firestore_db.get_user_zines(creator['id'], status='published')
 
-    is_following = False
-    if current_user.is_authenticated:
-        is_following = firestore_db.is_following(current_user.id, creator['id'])
+        is_following = False
+        if current_user.is_authenticated:
+            is_following = firestore_db.is_following(current_user.id, creator['id'])
 
-    # Convert to object-like format for template compatibility
-    class CreatorObj:
-        def __init__(self, data):
-            self.__dict__.update(data)
+        # Convert to object-like format for template compatibility
+        class CreatorObj:
+            def __init__(self, data):
+                self.__dict__.update(data)
 
-    creator_obj = CreatorObj(creator)
-    zines_objs = [CreatorObj(z) for z in zines]
+        creator_obj = CreatorObj(creator)
+        zines_objs = [CreatorObj(z) for z in zines]
 
-    return render_template('viewer/creator.html', creator=creator_obj, zines=zines_objs, is_following=is_following)
+        return render_template('viewer/creator.html', creator=creator_obj, zines=zines_objs, is_following=is_following)
+    else:
+        # SQLAlchemy fallback
+        creator = User.query.filter_by(username=username).first_or_404()
+        zines = creator.zines.filter_by(status='published').order_by(Zine.published_at.desc()).all()
+
+        is_following = False
+        if current_user.is_authenticated:
+            is_following = current_user.is_following(creator)
+
+        return render_template('viewer/creator.html', creator=creator, zines=zines, is_following=is_following)
 
 @bp.route('/<username>/<slug>')
 def view_zine(username, slug):
-    creator = firestore_db.get_user_by_username(username)
-    if not creator:
-        abort(404)
-
-    zine = firestore_db.get_zine_by_slug(creator['id'], slug)
-    if not zine:
-        abort(404)
-
-    if zine['status'] == 'draft':
-        if not current_user.is_authenticated or current_user.id != creator['id']:
+    if USE_FIRESTORE:
+        creator = firestore_db.get_user_by_username(username)
+        if not creator:
             abort(404)
 
-    pages = firestore_db.get_zine_pages(zine['id'])
+        zine = firestore_db.get_zine_by_slug(creator['id'], slug)
+        if not zine:
+            abort(404)
 
-    # Track view
-    session_id = request.cookies.get('session_id', None)
-    if not session_id:
-        session_id = str(uuid.uuid4())
+        if zine['status'] == 'draft':
+            if not current_user.is_authenticated or current_user.id != creator['id']:
+                abort(404)
 
-    firestore_db.track_view(
-        zine_id=zine['id'],
-        user_id=current_user.id if current_user.is_authenticated else None,
-        session_id=session_id,
-        referrer=request.referrer
-    )
+        pages = firestore_db.get_zine_pages(zine['id'])
+
+        # Track view
+        session_id = request.cookies.get('session_id', None)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        firestore_db.track_view(
+            zine_id=zine['id'],
+            user_id=current_user.id if current_user.is_authenticated else None,
+            session_id=session_id,
+            referrer=request.referrer
+        )
+    else:
+        # SQLAlchemy fallback
+        creator = User.query.filter_by(username=username).first_or_404()
+        zine = Zine.query.filter_by(creator_id=creator.id, slug=slug).first_or_404()
+
+        if zine.status == 'draft':
+            if not current_user.is_authenticated or current_user.id != creator.id:
+                abort(404)
+
+        pages = zine.pages.order_by(Page.order).all()
+
+        # Track view
+        session_id = request.cookies.get('session_id', None)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        zine.views_count += 1
+        db.session.commit()
 
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(request.url)
@@ -140,17 +179,26 @@ def view_zine(username, slug):
     qr_code = base64.b64encode(buffer.getvalue()).decode()
 
     is_following = False
-    if current_user.is_authenticated:
-        is_following = firestore_db.is_following(current_user.id, creator['id'])
 
-    # Convert to object-like format for template compatibility
-    class DataObj:
-        def __init__(self, data):
-            self.__dict__.update(data)
+    if USE_FIRESTORE:
+        if current_user.is_authenticated:
+            is_following = firestore_db.is_following(current_user.id, creator['id'])
 
-    zine_obj = DataObj(zine)
-    creator_obj = DataObj(creator)
-    pages_objs = [DataObj(p) for p in pages]
+        # Convert to object-like format for template compatibility
+        class DataObj:
+            def __init__(self, data):
+                self.__dict__.update(data)
+
+        zine_obj = DataObj(zine)
+        creator_obj = DataObj(creator)
+        pages_objs = [DataObj(p) for p in pages]
+    else:
+        if current_user.is_authenticated:
+            is_following = current_user.is_following(creator)
+
+        zine_obj = zine
+        creator_obj = creator
+        pages_objs = pages
 
     response = make_response(render_template(
         'viewer/view.html',
@@ -185,6 +233,8 @@ def track_read_time():
     session_id = request.cookies.get('session_id')
 
     if zine_id and read_time and session_id:
-        firestore_db.track_read_time(zine_id, session_id, read_time)
+        if USE_FIRESTORE:
+            firestore_db.track_read_time(zine_id, session_id, read_time)
+        # SQLAlchemy doesn't need special handling here
 
     return jsonify({'success': True})
