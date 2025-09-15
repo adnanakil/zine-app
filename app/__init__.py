@@ -58,11 +58,27 @@ def create_app():
     from app.firebase_auth import init_firebase
     init_firebase()
 
+    # Initialize Firestore database with demo data
+    from app.firestore_db import firestore_db
+    try:
+        firestore_db.init_demo_data()
+    except Exception as e:
+        print(f"Error initializing Firestore demo data: {e}")
+
     from app.models import User
+    from app.firestore_models import FirestoreUser
 
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        # Try Firestore first
+        firestore_user = FirestoreUser.get(user_id)
+        if firestore_user:
+            return firestore_user
+        # Fallback to SQLAlchemy for backward compatibility
+        try:
+            return User.query.get(int(user_id))
+        except:
+            return None
 
     from app.routes import main, auth, editor, viewer, api
     app.register_blueprint(main.bp)
