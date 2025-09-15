@@ -6,6 +6,33 @@ from datetime import datetime
 import json
 import re
 
+# Try to import Firestore
+try:
+    from app.firestore_db import firestore_db
+    USE_FIRESTORE = None  # Will be determined per request
+except Exception as e:
+    print(f"Firestore import failed in editor: {e}")
+    firestore_db = None
+    USE_FIRESTORE = False
+
+def use_firestore():
+    """Dynamically check if Firestore should be used"""
+    global USE_FIRESTORE
+    if USE_FIRESTORE is not None:
+        return USE_FIRESTORE
+
+    if firestore_db is None:
+        USE_FIRESTORE = False
+        return False
+
+    try:
+        USE_FIRESTORE = firestore_db.is_available()
+        return USE_FIRESTORE
+    except Exception as e:
+        print(f"Error checking Firestore availability: {e}")
+        USE_FIRESTORE = False
+        return False
+
 bp = Blueprint('editor', __name__, url_prefix='/editor')
 
 def generate_slug(title):
@@ -25,57 +52,113 @@ def create_zine():
     description = request.form.get('description')
 
     slug = generate_slug(title)
-    counter = 1
-    original_slug = slug
-    while Zine.query.filter_by(creator_id=current_user.id, slug=slug).first():
-        slug = f"{original_slug}-{counter}"
-        counter += 1
 
-    zine = Zine(
-        creator_id=current_user.id,
-        title=title,
-        slug=slug,
-        description=description,
-        status='draft'
-    )
-    db.session.add(zine)
-    db.session.commit()
+    if use_firestore():
+        # Firestore implementation
+        counter = 1
+        original_slug = slug
+        while firestore_db.get_zine_by_slug(current_user.id, slug):
+            slug = f"{original_slug}-{counter}"
+            counter += 1
 
-    first_page = Page(
-        zine_id=zine.id,
-        order=0,
-        content={'blocks': []},
-        template='blank'
-    )
-    db.session.add(first_page)
-    db.session.commit()
+        # Create zine in Firestore
+        zine = firestore_db.create_zine(
+            creator_id=current_user.id,
+            title=title,
+            slug=slug,
+            description=description,
+            status='draft'
+        )
 
-    return redirect(url_for('editor.edit', zine_id=zine.id))
+        # Create first page
+        first_page = firestore_db.create_page(
+            zine_id=zine['id'],
+            order=0,
+            content={'blocks': []},
+            template='blank'
+        )
 
-@bp.route('/<int:zine_id>')
+        return redirect(url_for('editor.edit', zine_id=zine['id']))
+    else:
+        # SQLAlchemy fallback
+        counter = 1
+        original_slug = slug
+        while Zine.query.filter_by(creator_id=current_user.id, slug=slug).first():
+            slug = f"{original_slug}-{counter}"
+            counter += 1
+
+        zine = Zine(
+            creator_id=current_user.id,
+            title=title,
+            slug=slug,
+            description=description,
+            status='draft'
+        )
+        db.session.add(zine)
+        db.session.commit()
+
+        first_page = Page(
+            zine_id=zine.id,
+            order=0,
+            content={'blocks': []},
+            template='blank'
+        )
+        db.session.add(first_page)
+        db.session.commit()
+
+        return redirect(url_for('editor.edit', zine_id=zine.id))
+
+@bp.route('/<zine_id>')
 @login_required
 def edit(zine_id):
-    zine = Zine.query.get_or_404(zine_id)
-    if zine.creator_id != current_user.id:
-        flash('You can only edit your own zines', 'error')
-        return redirect(url_for('main.index'))
+    if use_firestore():
+        # Firestore implementation
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            flash('You can only edit your own zines', 'error')
+            return redirect(url_for('main.index'))
 
-    pages = zine.pages.all()
-    return render_template('editor/edit.html', zine=zine, pages=pages)
+        pages = firestore_db.get_zine_pages(zine_id)
 
-@bp.route('/<int:zine_id>/save', methods=['POST'])
+        # Convert to object-like format for template compatibility
+        class ZineObj:
+            def __init__(self, data):
+                self.__dict__.update(data)
+                self.pages = type('Pages', (), {'all': lambda: pages})()
+
+        zine_obj = ZineObj(zine)
+        return render_template('editor/edit.html', zine=zine_obj, pages=pages)
+    else:
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+        except ValueError:
+            flash('Invalid zine ID', 'error')
+            return redirect(url_for('main.index'))
+
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            flash('You can only edit your own zines', 'error')
+            return redirect(url_for('main.index'))
+
+        pages = zine.pages.all()
+        return render_template('editor/edit.html', zine=zine, pages=pages)
+
+@bp.route('/<zine_id>/save', methods=['POST'])
 @login_required
 def save(zine_id):
-    zine = Zine.query.get_or_404(zine_id)
-    if zine.creator_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-
     data = request.get_json()
     page_id = data.get('page_id')
     content = data.get('content')
 
-    if page_id:
-        page = Page.query.get_or_404(page_id)
+    if use_firestore():
+        # Firestore implementation
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        if page_id:
+            page = firestore_db.get_page_by_id(page_id)
         if page.zine_id != zine_id:
             return jsonify({'error': 'Invalid page'}), 400
     else:
@@ -109,7 +192,7 @@ def save(zine_id):
 
     return jsonify({'success': True, 'page_id': page.id})
 
-@bp.route('/<int:zine_id>/add-page', methods=['POST'])
+@bp.route('/<zine_id>/add-page', methods=['POST'])
 @login_required
 def add_page(zine_id):
     zine = Zine.query.get_or_404(zine_id)
@@ -130,7 +213,7 @@ def add_page(zine_id):
 
     return jsonify({'success': True, 'page_id': page.id, 'order': page.order})
 
-@bp.route('/<int:zine_id>/delete-page/<int:page_id>', methods=['DELETE'])
+@bp.route('/<zine_id>/delete-page/<page_id>', methods=['DELETE'])
 @login_required
 def delete_page(zine_id, page_id):
     zine = Zine.query.get_or_404(zine_id)
@@ -152,29 +235,50 @@ def delete_page(zine_id, page_id):
     db.session.commit()
     return jsonify({'success': True})
 
-@bp.route('/<int:zine_id>/publish', methods=['POST'])
+@bp.route('/<zine_id>/publish', methods=['POST'])
 @login_required
 def publish(zine_id):
-    zine = Zine.query.get_or_404(zine_id)
-    if zine.creator_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-
     data = request.get_json()
     visibility = data.get('visibility', 'public')
-
-    zine.status = 'published' if visibility == 'public' else 'unlisted'
-    zine.published_at = datetime.utcnow()
-
     tags_data = data.get('tags', [])[:3]
-    zine.tags = []
-    for tag_name in tags_data:
-        tag = Tag.query.filter_by(name=tag_name).first()
-        if not tag:
-            tag = Tag(name=tag_name)
-            db.session.add(tag)
-        zine.tags.append(tag)
 
-    db.session.commit()
+    if use_firestore():
+        # Firestore implementation
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Update zine status in Firestore
+        updates = {
+            'status': 'published' if visibility == 'public' else 'unlisted',
+            'published_at': datetime.utcnow(),
+            'tags': tags_data,
+            'updated_at': datetime.utcnow()
+        }
+        firestore_db.update_zine(zine_id, updates)
+    else:
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid zine ID'}), 400
+
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        zine.status = 'published' if visibility == 'public' else 'unlisted'
+        zine.published_at = datetime.utcnow()
+
+        zine.tags = []
+        for tag_name in tags_data:
+            tag = Tag.query.filter_by(name=tag_name).first()
+            if not tag:
+                tag = Tag(name=tag_name)
+                db.session.add(tag)
+            zine.tags.append(tag)
+
+        db.session.commit()
 
     if visibility == 'public':
         for follower in current_user.followers.all():
