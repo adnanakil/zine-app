@@ -397,6 +397,7 @@ imageUpload.addEventListener('change', (e) => {
 });
 
 document.getElementById('saveBtn').addEventListener('click', () => {
+    const zineId = pageCanvas.dataset.zineId;
     const content = {
         blocks: Array.from(pageCanvas.children).map(el => ({
             type: el.dataset.type,
@@ -416,7 +417,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
         }))
     };
 
-    fetch(`/editor/{{ zine.id }}/save`, {
+    fetch(`/editor/${zineId}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -428,12 +429,19 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     .then(data => {
         if (data.success) {
             alert('Saved successfully!');
+        } else if (data.error) {
+            alert('Error: ' + data.error);
         }
+    })
+    .catch(err => {
+        console.error('Save error:', err);
+        alert('Failed to save: ' + err.message);
     });
 });
 
 document.getElementById('addPageBtn').addEventListener('click', () => {
-    fetch(`/editor/{{ zine.id }}/add-page`, {
+    const zineId = pageCanvas.dataset.zineId;
+    fetch(`/editor/${zineId}/add-page`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -441,15 +449,22 @@ document.getElementById('addPageBtn').addEventListener('click', () => {
     .then(data => {
         if (data.success) {
             location.reload();
+        } else if (data.error) {
+            alert('Error: ' + data.error);
         }
+    })
+    .catch(err => {
+        console.error('Add page error:', err);
+        alert('Failed to add page: ' + err.message);
     });
 });
 
 document.getElementById('publishBtn').addEventListener('click', () => {
+    const zineId = pageCanvas.dataset.zineId;
     const visibility = confirm('Make this zine public? (OK for public, Cancel for unlisted)') ? 'public' : 'unlisted';
     const tags = prompt('Enter up to 3 tags (comma-separated):');
 
-    fetch(`/editor/{{ zine.id }}/publish`, {
+    fetch(`/editor/${zineId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -462,7 +477,13 @@ document.getElementById('publishBtn').addEventListener('click', () => {
         if (data.success) {
             alert('Published! View at: ' + data.url);
             window.location.href = data.url;
+        } else if (data.error) {
+            alert('Error: ' + data.error);
         }
+    })
+    .catch(err => {
+        console.error('Publish error:', err);
+        alert('Failed to publish: ' + err.message);
     });
 });
 

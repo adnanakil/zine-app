@@ -5,7 +5,7 @@
 {% block content %}
 <div class="auth-container">
     <h2>Create New Zine</h2>
-    <form method="POST" action="/editor/create">
+    <form method="POST" action="/editor/create" id="createZineForm">
         <div class="form-group">
             <label for="title">Title</label>
             <input type="text" id="title" name="title" required maxlength="255">
@@ -17,4 +17,18 @@
         <button type="submit" class="btn-primary" style="width: 100%;">Create Zine</button>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('createZineForm').addEventListener('submit', function(e) {
+    const title = document.getElementById('title').value.trim();
+    if (!title) {
+        e.preventDefault();
+        alert('Please enter a title for your zine');
+        return false;
+    }
+    console.log('Submitting form with title:', title);
+});
+</script>
 {% endblock %}

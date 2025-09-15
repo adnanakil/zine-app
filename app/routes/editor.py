@@ -48,65 +48,78 @@ def new_zine():
 @bp.route('/create', methods=['POST'])
 @login_required
 def create_zine():
-    title = request.form.get('title')
-    description = request.form.get('description')
+    try:
+        title = request.form.get('title')
+        description = request.form.get('description')
 
-    slug = generate_slug(title)
+        if not title:
+            flash('Title is required', 'error')
+            return redirect(url_for('editor.new_zine'))
 
-    if use_firestore():
-        # Firestore implementation
-        counter = 1
-        original_slug = slug
-        while firestore_db.get_zine_by_slug(current_user.id, slug):
-            slug = f"{original_slug}-{counter}"
-            counter += 1
+        slug = generate_slug(title)
 
-        # Create zine in Firestore
-        zine = firestore_db.create_zine(
-            creator_id=current_user.id,
-            title=title,
-            slug=slug,
-            description=description,
-            status='draft'
-        )
+        if use_firestore():
+            # Firestore implementation
+            counter = 1
+            original_slug = slug
+            while firestore_db.get_zine_by_slug(current_user.id, slug):
+                slug = f"{original_slug}-{counter}"
+                counter += 1
 
-        # Create first page
-        first_page = firestore_db.create_page(
-            zine_id=zine['id'],
-            order=0,
-            content={'blocks': []},
-            template='blank'
-        )
+            # Create zine in Firestore
+            zine = firestore_db.create_zine(
+                creator_id=current_user.id,
+                title=title,
+                slug=slug,
+                description=description,
+                status='draft'
+            )
 
-        return redirect(url_for('editor.edit', zine_id=zine['id']))
-    else:
-        # SQLAlchemy fallback
-        counter = 1
-        original_slug = slug
-        while Zine.query.filter_by(creator_id=current_user.id, slug=slug).first():
-            slug = f"{original_slug}-{counter}"
-            counter += 1
+            # Create first page
+            first_page = firestore_db.create_page(
+                zine_id=zine['id'],
+                order=0,
+                content={'blocks': []},
+                template='blank'
+            )
 
-        zine = Zine(
-            creator_id=current_user.id,
-            title=title,
-            slug=slug,
-            description=description,
-            status='draft'
-        )
-        db.session.add(zine)
-        db.session.commit()
+            flash(f'Zine "{title}" created successfully!', 'success')
+            return redirect(url_for('editor.edit', zine_id=zine['id']))
+        else:
+            # SQLAlchemy fallback
+            counter = 1
+            original_slug = slug
+            while Zine.query.filter_by(creator_id=current_user.id, slug=slug).first():
+                slug = f"{original_slug}-{counter}"
+                counter += 1
 
-        first_page = Page(
-            zine_id=zine.id,
-            order=0,
-            content={'blocks': []},
-            template='blank'
-        )
-        db.session.add(first_page)
-        db.session.commit()
+            zine = Zine(
+                creator_id=current_user.id,
+                title=title,
+                slug=slug,
+                description=description,
+                status='draft'
+            )
+            db.session.add(zine)
+            db.session.commit()
 
-        return redirect(url_for('editor.edit', zine_id=zine.id))
+            first_page = Page(
+                zine_id=zine.id,
+                order=0,
+                content={'blocks': []},
+                template='blank'
+            )
+            db.session.add(first_page)
+            db.session.commit()
+
+            flash(f'Zine "{title}" created successfully!', 'success')
+            return redirect(url_for('editor.edit', zine_id=zine.id))
+    except Exception as e:
+        print(f"Error creating zine: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Error creating zine: {str(e)}', 'error')
+        return redirect(url_for('editor.new_zine'))
 
 @bp.route('/<zine_id>/debug')
 @login_required
@@ -204,35 +217,50 @@ def save(zine_id):
 
         return jsonify({'success': True, 'page_id': page_id})
     else:
-        last_page = Page.query.filter_by(zine_id=zine_id).order_by(Page.order.desc()).first()
-        next_order = (last_page.order + 1) if last_page else 0
-        page = Page(zine_id=zine_id, order=next_order)
-        db.session.add(page)
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid zine ID'}), 400
 
-    page.content = content
-    page.updated_at = datetime.utcnow()
-    zine.updated_at = datetime.utcnow()
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
 
-    version_count = ZineVersion.query.filter_by(zine_id=zine_id).count()
-    if version_count >= 10:
-        oldest = ZineVersion.query.filter_by(zine_id=zine_id).order_by(ZineVersion.created_at).first()
-        db.session.delete(oldest)
+        if page_id:
+            page = Page.query.get_or_404(page_id)
+            if page.zine_id != zine_id:
+                return jsonify({'error': 'Invalid page'}), 400
+        else:
+            last_page = Page.query.filter_by(zine_id=zine_id).order_by(Page.order.desc()).first()
+            next_order = (last_page.order + 1) if last_page else 0
+            page = Page(zine_id=zine_id, order=next_order)
+            db.session.add(page)
 
-    all_pages = Page.query.filter_by(zine_id=zine_id).order_by(Page.order).all()
-    snapshot = {
-        'pages': [{'order': p.order, 'content': p.content} for p in all_pages]
-    }
+        page.content = content
+        page.updated_at = datetime.utcnow()
+        zine.updated_at = datetime.utcnow()
 
-    version = ZineVersion(
-        zine_id=zine_id,
-        version_number=version_count + 1,
-        content_snapshot=snapshot,
-        created_by=current_user.id
-    )
-    db.session.add(version)
-    db.session.commit()
+        version_count = ZineVersion.query.filter_by(zine_id=zine_id).count()
+        if version_count >= 10:
+            oldest = ZineVersion.query.filter_by(zine_id=zine_id).order_by(ZineVersion.created_at).first()
+            db.session.delete(oldest)
 
-    return jsonify({'success': True, 'page_id': page.id})
+        all_pages = Page.query.filter_by(zine_id=zine_id).order_by(Page.order).all()
+        snapshot = {
+            'pages': [{'order': p.order, 'content': p.content} for p in all_pages]
+        }
+
+        version = ZineVersion(
+            zine_id=zine_id,
+            version_number=version_count + 1,
+            content_snapshot=snapshot,
+            created_by=current_user.id
+        )
+        db.session.add(version)
+        db.session.commit()
+
+        return jsonify({'success': True, 'page_id': page.id})
 
 @bp.route('/<zine_id>/add-page', methods=['POST'])
 @login_required
@@ -298,6 +326,10 @@ def publish(zine_id):
             'updated_at': datetime.utcnow()
         }
         firestore_db.update_zine(zine_id, updates)
+
+        # Get the slug and title from the Firestore zine
+        zine_slug = zine.get('slug')
+        zine_title = zine.get('title')
     else:
         # SQLAlchemy fallback
         try:
@@ -322,22 +354,26 @@ def publish(zine_id):
 
         db.session.commit()
 
-    if visibility == 'public':
-        for follower in current_user.followers.all():
-            if follower.email_notifications:
-                notification = Notification(
-                    user_id=follower.id,
-                    type='new_issue',
-                    title='New zine published',
-                    message=f'{current_user.username} published "{zine.title}"',
-                    link=url_for('viewer.view_zine', username=current_user.username, slug=zine.slug)
-                )
-                db.session.add(notification)
-        db.session.commit()
+        # Get the slug and title from the SQLAlchemy zine
+        zine_slug = zine.slug
+        zine_title = zine.title
+
+        if visibility == 'public':
+            for follower in current_user.followers.all():
+                if follower.email_notifications:
+                    notification = Notification(
+                        user_id=follower.id,
+                        type='new_issue',
+                        title='New zine published',
+                        message=f'{current_user.username} published "{zine_title}"',
+                        link=url_for('viewer.view_zine', username=current_user.username, slug=zine_slug)
+                    )
+                    db.session.add(notification)
+            db.session.commit()
 
     return jsonify({
         'success': True,
-        'url': url_for('viewer.view_zine', username=current_user.username, slug=zine.slug, _external=True)
+        'url': url_for('viewer.view_zine', username=current_user.username, slug=zine_slug, _external=True)
     })
 
 @bp.route('/my-zines')
