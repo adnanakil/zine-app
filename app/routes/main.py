@@ -72,6 +72,8 @@ def index():
                             self.creator = type('Creator', (), creator_data)()
                         else:
                             self.creator = None
+                        # Add pages property (empty list for feed view)
+                        self.pages = []
 
                 feed_zines_objs = [ZineObj(z) for z in feed_zines if z]
                 return render_template('index.html', zines=feed_zines_objs, feed=True)
@@ -97,6 +99,8 @@ def index():
                             self.creator = type('Creator', (), creator_data)()
                         else:
                             self.creator = None
+                        # Add pages property (empty list for feed view)
+                        self.pages = []
 
                 featured_zines_objs = [ZineObj(z) for z in featured_zines if z]
                 return render_template('index.html', zines=featured_zines_objs, feed=False)
