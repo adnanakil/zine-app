@@ -17,18 +17,31 @@ def init_firebase():
             cred = credentials.Certificate(service_account_path)
         else:
             # Use environment variables for Vercel deployment
-            private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
+            import base64
 
-            # Handle different private key formats
-            if private_key:
-                # If the key doesn't have actual newlines, replace \n with actual newlines
-                if '\\n' in private_key:
-                    private_key = private_key.replace('\\n', '\n')
-                # Ensure proper formatting
-                if not private_key.startswith('-----BEGIN'):
-                    private_key = '-----BEGIN PRIVATE KEY-----\n' + private_key
-                if not private_key.endswith('-----\n'):
-                    private_key = private_key + '\n-----END PRIVATE KEY-----\n'
+            # Try base64 encoded key first (most reliable)
+            private_key_base64 = os.getenv('FIREBASE_PRIVATE_KEY_BASE64', '')
+            if private_key_base64:
+                try:
+                    private_key = base64.b64decode(private_key_base64).decode('utf-8')
+                    print("Using base64 encoded private key")
+                except Exception as e:
+                    print(f"Error decoding base64 key: {e}")
+                    private_key = ''
+            else:
+                # Fallback to direct private key
+                private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
+
+                # Handle different private key formats
+                if private_key:
+                    # If the key doesn't have actual newlines, replace \n with actual newlines
+                    if '\\n' in private_key:
+                        private_key = private_key.replace('\\n', '\n')
+                    # Ensure proper formatting
+                    if not private_key.startswith('-----BEGIN'):
+                        private_key = '-----BEGIN PRIVATE KEY-----\n' + private_key
+                    if not private_key.endswith('-----\n'):
+                        private_key = private_key + '\n-----END PRIVATE KEY-----\n'
 
             firebase_config = {
                 "type": "service_account",
