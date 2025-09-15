@@ -37,63 +37,82 @@ def use_firestore():
 
 bp = Blueprint('main', __name__)
 
+@bp.route('/health')
+def health():
+    """Simple health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'firestore': use_firestore(),
+        'timestamp': datetime.now().isoformat()
+    })
+
 @bp.route('/')
 def index():
-    if current_user.is_authenticated:
-        if use_firestore():
-            # Get following list and their recent zines
-            following = firestore_db.get_following(current_user.id)
-            feed_zines = []
-            for followed_user in following:
-                user_zines = firestore_db.get_user_zines(followed_user['id'], status='published')
-                feed_zines.extend(user_zines[:5])  # Limit per user
+    try:
+        if current_user.is_authenticated:
+            if use_firestore():
+                # Get following list and their recent zines
+                following = firestore_db.get_following(current_user.id)
+                feed_zines = []
+                for followed_user in following:
+                    user_zines = firestore_db.get_user_zines(followed_user['id'], status='published')
+                    feed_zines.extend(user_zines[:5])  # Limit per user
 
-            # Sort by published_at and limit total
-            feed_zines.sort(key=lambda x: x.get('published_at', x.get('created_at')), reverse=True)
-            feed_zines = feed_zines[:20]
+                # Sort by published_at and limit total
+                feed_zines.sort(key=lambda x: x.get('published_at', x.get('created_at')), reverse=True)
+                feed_zines = feed_zines[:20]
 
-            # Convert to object-like format for template compatibility
-            class ZineObj:
-                def __init__(self, data):
-                    self.__dict__.update(data)
-                    # Add creator property
-                    creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
-                    if creator_data:
-                        self.creator = type('Creator', (), creator_data)()
-                    else:
-                        self.creator = None
+                # Convert to object-like format for template compatibility
+                class ZineObj:
+                    def __init__(self, data):
+                        self.__dict__.update(data)
+                        # Add creator property
+                        creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
+                        if creator_data:
+                            self.creator = type('Creator', (), creator_data)()
+                        else:
+                            self.creator = None
 
-            feed_zines_objs = [ZineObj(z) for z in feed_zines if z]
-            return render_template('index.html', zines=feed_zines_objs, feed=True)
+                feed_zines_objs = [ZineObj(z) for z in feed_zines if z]
+                return render_template('index.html', zines=feed_zines_objs, feed=True)
+            else:
+                # SQLAlchemy fallback
+                feed_zines = current_user.get_feed().limit(20).all()
+                return render_template('index.html', zines=feed_zines, feed=True)
         else:
-            # SQLAlchemy fallback
-            feed_zines = current_user.get_feed().limit(20).all()
-            return render_template('index.html', zines=feed_zines, feed=True)
-    else:
-        if use_firestore():
-            # Get featured zines sorted by views count
-            featured_zines = firestore_db.get_published_zines(limit=50)
-            # Sort by views_count
-            featured_zines.sort(key=lambda x: x.get('views_count', 0), reverse=True)
-            featured_zines = featured_zines[:12]
+            if use_firestore():
+                # Get featured zines sorted by views count
+                featured_zines = firestore_db.get_published_zines(limit=50)
+                # Sort by views_count
+                featured_zines.sort(key=lambda x: x.get('views_count', 0), reverse=True)
+                featured_zines = featured_zines[:12]
 
-            # Convert to object-like format for template compatibility
-            class ZineObj:
-                def __init__(self, data):
-                    self.__dict__.update(data)
-                    # Add creator property
-                    creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
-                    if creator_data:
-                        self.creator = type('Creator', (), creator_data)()
-                    else:
-                        self.creator = None
+                # Convert to object-like format for template compatibility
+                class ZineObj:
+                    def __init__(self, data):
+                        self.__dict__.update(data)
+                        # Add creator property
+                        creator_data = firestore_db.get_user_by_id(data.get('creator_id'))
+                        if creator_data:
+                            self.creator = type('Creator', (), creator_data)()
+                        else:
+                            self.creator = None
 
-            featured_zines_objs = [ZineObj(z) for z in featured_zines if z]
-            return render_template('index.html', zines=featured_zines_objs, feed=False)
-        else:
-            # SQLAlchemy fallback
-            featured_zines = Zine.query.filter_by(status='published').order_by(Zine.views_count.desc()).limit(12).all()
-            return render_template('index.html', zines=featured_zines, feed=False)
+                featured_zines_objs = [ZineObj(z) for z in featured_zines if z]
+                return render_template('index.html', zines=featured_zines_objs, feed=False)
+            else:
+                # SQLAlchemy fallback
+                featured_zines = Zine.query.filter_by(status='published').order_by(Zine.views_count.desc()).limit(12).all()
+                return render_template('index.html', zines=featured_zines, feed=False)
+    except Exception as e:
+        print(f"Error in index route: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return a simple error page
+        return jsonify({
+            'error': str(e),
+            'firestore_available': use_firestore() if firestore_db else False
+        }), 500
 
 @bp.route('/explore')
 def explore():
