@@ -3,7 +3,6 @@ Firestore database integration for Zine app
 Replaces SQLAlchemy with Firebase Firestore for persistent storage on Vercel
 """
 
-from firebase_admin import firestore
 from datetime import datetime
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,7 +10,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 class FirestoreDB:
     def __init__(self):
-        self.db = firestore.client()
+        self.db = None
+
+    def _get_db(self):
+        """Lazy initialization of Firestore client"""
+        if self.db is None:
+            from firebase_admin import firestore
+            self.db = firestore.client()
+        return self.db
 
     # User operations
     def create_user(self, username, email, firebase_uid, password=None):
@@ -33,32 +39,32 @@ class FirestoreDB:
         if password:
             user_data['password_hash'] = generate_password_hash(password)
 
-        self.db.collection('users').document(user_id).set(user_data)
+        self._get_db().collection('users').document(user_id).set(user_data)
         return user_data
 
     def get_user_by_id(self, user_id):
         """Get user by ID"""
-        doc = self.db.collection('users').document(user_id).get()
+        doc = self._get_db().collection('users').document(user_id).get()
         return doc.to_dict() if doc.exists else None
 
     def get_user_by_username(self, username):
         """Get user by username"""
-        users = self.db.collection('users').where('username', '==', username).limit(1).get()
+        users = self._get_db().collection('users').where('username', '==', username).limit(1).get()
         return users[0].to_dict() if users else None
 
     def get_user_by_email(self, email):
         """Get user by email"""
-        users = self.db.collection('users').where('email', '==', email).limit(1).get()
+        users = self._get_db().collection('users').where('email', '==', email).limit(1).get()
         return users[0].to_dict() if users else None
 
     def get_user_by_firebase_uid(self, firebase_uid):
         """Get user by Firebase UID"""
-        users = self.db.collection('users').where('firebase_uid', '==', firebase_uid).limit(1).get()
+        users = self._get_db().collection('users').where('firebase_uid', '==', firebase_uid).limit(1).get()
         return users[0].to_dict() if users else None
 
     def update_user(self, user_id, data):
         """Update user data"""
-        self.db.collection('users').document(user_id).update(data)
+        self._get_db().collection('users').document(user_id).update(data)
 
     # Zine operations
     def create_zine(self, creator_id, title, slug, description='', status='draft'):
@@ -82,17 +88,17 @@ class FirestoreDB:
             'format': 'A5'
         }
 
-        self.db.collection('zines').document(zine_id).set(zine_data)
+        self._get_db().collection('zines').document(zine_id).set(zine_data)
         return zine_data
 
     def get_zine_by_id(self, zine_id):
         """Get zine by ID"""
-        doc = self.db.collection('zines').document(zine_id).get()
+        doc = self._get_db().collection('zines').document(zine_id).get()
         return doc.to_dict() if doc.exists else None
 
     def get_zine_by_slug(self, creator_id, slug):
         """Get zine by creator and slug"""
-        zines = self.db.collection('zines')\
+        zines = self._get_db().collection('zines')\
             .where('creator_id', '==', creator_id)\
             .where('slug', '==', slug)\
             .limit(1).get()
@@ -100,15 +106,17 @@ class FirestoreDB:
 
     def get_user_zines(self, creator_id, status=None):
         """Get all zines by a user"""
-        query = self.db.collection('zines').where('creator_id', '==', creator_id)
+        query = self._get_db().collection('zines').where('creator_id', '==', creator_id)
         if status:
             query = query.where('status', '==', status)
+        from firebase_admin import firestore
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
         return [doc.to_dict() for doc in query.get()]
 
     def get_published_zines(self, limit=20):
         """Get recently published zines"""
-        query = self.db.collection('zines')\
+        from firebase_admin import firestore
+        query = self._get_db().collection('zines')\
             .where('status', '==', 'published')\
             .order_by('published_at', direction=firestore.Query.DESCENDING)\
             .limit(limit)
@@ -117,17 +125,17 @@ class FirestoreDB:
     def update_zine(self, zine_id, data):
         """Update zine data"""
         data['updated_at'] = datetime.utcnow()
-        self.db.collection('zines').document(zine_id).update(data)
+        self._get_db().collection('zines').document(zine_id).update(data)
 
     def delete_zine(self, zine_id):
         """Delete a zine and all its pages"""
         # Delete all pages first
-        pages = self.db.collection('pages').where('zine_id', '==', zine_id).get()
+        pages = self._get_db().collection('pages').where('zine_id', '==', zine_id).get()
         for page in pages:
             page.reference.delete()
 
         # Delete the zine
-        self.db.collection('zines').document(zine_id).delete()
+        self._get_db().collection('zines').document(zine_id).delete()
 
     # Page operations
     def create_page(self, zine_id, order=0, content=None, template='blank'):
@@ -143,17 +151,17 @@ class FirestoreDB:
             'updated_at': datetime.utcnow()
         }
 
-        self.db.collection('pages').document(page_id).set(page_data)
+        self._get_db().collection('pages').document(page_id).set(page_data)
         return page_data
 
     def get_page_by_id(self, page_id):
         """Get page by ID"""
-        doc = self.db.collection('pages').document(page_id).get()
+        doc = self._get_db().collection('pages').document(page_id).get()
         return doc.to_dict() if doc.exists else None
 
     def get_zine_pages(self, zine_id):
         """Get all pages for a zine"""
-        query = self.db.collection('pages')\
+        query = self._get_db().collection('pages')\
             .where('zine_id', '==', zine_id)\
             .order_by('order')
         return [doc.to_dict() for doc in query.get()]
@@ -161,11 +169,11 @@ class FirestoreDB:
     def update_page(self, page_id, data):
         """Update page data"""
         data['updated_at'] = datetime.utcnow()
-        self.db.collection('pages').document(page_id).update(data)
+        self._get_db().collection('pages').document(page_id).update(data)
 
     def delete_page(self, page_id):
         """Delete a page"""
-        self.db.collection('pages').document(page_id).delete()
+        self._get_db().collection('pages').document(page_id).delete()
 
     # Follow operations
     def follow_user(self, follower_id, followed_id):
@@ -178,7 +186,7 @@ class FirestoreDB:
             'created_at': datetime.utcnow()
         }
 
-        self.db.collection('follows').document(follow_id).set(follow_data)
+        self._get_db().collection('follows').document(follow_id).set(follow_data)
 
         # Update counts
         follower = self.get_user_by_id(follower_id)
@@ -192,7 +200,7 @@ class FirestoreDB:
     def unfollow_user(self, follower_id, followed_id):
         """Unfollow a user"""
         follow_id = f"{follower_id}_{followed_id}"
-        self.db.collection('follows').document(follow_id).delete()
+        self._get_db().collection('follows').document(follow_id).delete()
 
         # Update counts
         follower = self.get_user_by_id(follower_id)
@@ -206,12 +214,12 @@ class FirestoreDB:
     def is_following(self, follower_id, followed_id):
         """Check if user is following another user"""
         follow_id = f"{follower_id}_{followed_id}"
-        doc = self.db.collection('follows').document(follow_id).get()
+        doc = self._get_db().collection('follows').document(follow_id).get()
         return doc.exists
 
     def get_followers(self, user_id):
         """Get all followers of a user"""
-        query = self.db.collection('follows').where('followed_id', '==', user_id)
+        query = self._get_db().collection('follows').where('followed_id', '==', user_id)
         followers = []
         for doc in query.get():
             follower_data = doc.to_dict()
@@ -222,7 +230,7 @@ class FirestoreDB:
 
     def get_following(self, user_id):
         """Get all users that a user is following"""
-        query = self.db.collection('follows').where('follower_id', '==', user_id)
+        query = self._get_db().collection('follows').where('follower_id', '==', user_id)
         following = []
         for doc in query.get():
             follow_data = doc.to_dict()
@@ -245,7 +253,7 @@ class FirestoreDB:
             'created_at': datetime.utcnow()
         }
 
-        self.db.collection('analytics').document(analytics_id).set(analytics_data)
+        self._get_db().collection('analytics').document(analytics_id).set(analytics_data)
 
         # Update zine view count
         zine = self.get_zine_by_id(zine_id)
@@ -254,7 +262,7 @@ class FirestoreDB:
 
     def track_read_time(self, zine_id, session_id, read_time):
         """Update read time for a session"""
-        query = self.db.collection('analytics')\
+        query = self._get_db().collection('analytics')\
             .where('zine_id', '==', zine_id)\
             .where('session_id', '==', session_id)\
             .where('event_type', '==', 'view')\
