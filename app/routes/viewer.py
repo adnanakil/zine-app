@@ -39,12 +39,20 @@ def demo_zine():
         DemoPage(1, {
             "elements": [
                 {
+                    "type": "image",
+                    "src": "https://images.unsplash.com/photo-1755868679492-a708c7626971?q=80&w=985&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                    "x": 0,
+                    "y": 0,
+                    "width": "100%",
+                    "height": "100%"
+                },
+                {
                     "type": "text",
-                    "content": "<h1>Welcome to Zines!</h1><p>This is a demo zine to show how the viewer works.</p>",
-                    "x": 50,
-                    "y": 100,
-                    "width": 300,
-                    "height": 200
+                    "content": "<h1 style='color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);'>Welcome to Zines!</h1><p style='color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);'>Express yourself through beautiful digital publications</p>",
+                    "x": 20,
+                    "y": 50,
+                    "width": 360,
+                    "height": 150
                 }
             ]
         }),
@@ -52,11 +60,19 @@ def demo_zine():
             "elements": [
                 {
                     "type": "text",
-                    "content": "<h2>Create Your Own</h2><p>Sign up to create and share your own digital zines!</p>",
-                    "x": 50,
-                    "y": 50,
-                    "width": 300,
-                    "height": 150
+                    "content": "<h2>Full-Screen Experience</h2><p>Every zine is optimized for mobile viewing with immersive full-screen layouts.</p>",
+                    "x": 20,
+                    "y": 100,
+                    "width": 360,
+                    "height": 200
+                },
+                {
+                    "type": "text",
+                    "content": "<p style='background: #007bff; color: white; padding: 20px; border-radius: 10px; text-align: center;'><strong>Sign up to create your own!</strong></p>",
+                    "x": 20,
+                    "y": 350,
+                    "width": 360,
+                    "height": 100
                 }
             ]
         })
