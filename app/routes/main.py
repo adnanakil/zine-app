@@ -240,11 +240,19 @@ def test_firebase():
 @bp.route('/health')
 def health_check():
     """Health check endpoint that reports Firestore status"""
+    import os
+
     health_status = {
         'status': 'healthy',
         'database': 'firestore' if USE_FIRESTORE else 'sqlalchemy',
         'firestore_available': USE_FIRESTORE,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'env_check': {
+            'FIREBASE_PROJECT_ID': bool(os.getenv('FIREBASE_PROJECT_ID')),
+            'FIREBASE_PRIVATE_KEY_BASE64': bool(os.getenv('FIREBASE_PRIVATE_KEY_BASE64')),
+            'FIREBASE_CLIENT_EMAIL': bool(os.getenv('FIREBASE_CLIENT_EMAIL')),
+            'FIREBASE_PRIVATE_KEY_ID': bool(os.getenv('FIREBASE_PRIVATE_KEY_ID'))
+        }
     }
 
     if USE_FIRESTORE:
@@ -256,5 +264,8 @@ def health_check():
             health_status['firestore_connection'] = 'failed'
             health_status['firestore_error'] = str(e)
             health_status['status'] = 'degraded'
+    else:
+        # Check why Firestore is not available
+        health_status['firestore_check'] = firestore_db.is_available()
 
     return jsonify(health_status)
