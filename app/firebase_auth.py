@@ -17,11 +17,24 @@ def init_firebase():
             cred = credentials.Certificate(service_account_path)
         else:
             # Use environment variables for Vercel deployment
+            private_key = os.getenv('FIREBASE_PRIVATE_KEY', '')
+
+            # Handle different private key formats
+            if private_key:
+                # If the key doesn't have actual newlines, replace \n with actual newlines
+                if '\\n' in private_key:
+                    private_key = private_key.replace('\\n', '\n')
+                # Ensure proper formatting
+                if not private_key.startswith('-----BEGIN'):
+                    private_key = '-----BEGIN PRIVATE KEY-----\n' + private_key
+                if not private_key.endswith('-----\n'):
+                    private_key = private_key + '\n-----END PRIVATE KEY-----\n'
+
             firebase_config = {
                 "type": "service_account",
                 "project_id": os.getenv('FIREBASE_PROJECT_ID'),
                 "private_key_id": os.getenv('FIREBASE_PRIVATE_KEY_ID'),
-                "private_key": os.getenv('FIREBASE_PRIVATE_KEY', '').replace('\\n', '\n'),
+                "private_key": private_key,
                 "client_email": os.getenv('FIREBASE_CLIENT_EMAIL'),
                 "client_id": os.getenv('FIREBASE_CLIENT_ID'),
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -49,8 +62,13 @@ def init_firebase():
             print("Firebase Admin SDK initialized successfully")
 
     except Exception as e:
-        print(f"\nFirebase Admin SDK initialization skipped: {str(e)}")
+        print(f"\nFirebase Admin SDK initialization error: {str(e)}")
+        print(f"Project ID: {os.getenv('FIREBASE_PROJECT_ID')}")
+        print(f"Client Email: {os.getenv('FIREBASE_CLIENT_EMAIL')}")
+        print(f"Private Key exists: {bool(os.getenv('FIREBASE_PRIVATE_KEY'))}")
         print("Frontend authentication will still work\n")
+        import traceback
+        traceback.print_exc()
         return None
 
     return firebase_app

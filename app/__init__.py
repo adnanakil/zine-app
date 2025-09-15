@@ -61,13 +61,17 @@ def create_app():
     # Initialize Firestore database with demo data only if Firebase is configured
     try:
         if firebase_app:  # Only use Firestore if Firebase Admin SDK is initialized
+            print("Firebase app initialized, attempting Firestore connection...")
             from app.firestore_db import firestore_db
             firestore_db.init_demo_data()
+            print("Firestore initialized successfully")
         else:
             print("Firebase not configured - using SQLAlchemy only")
     except Exception as e:
         print(f"Error initializing Firestore: {e}")
         print("Falling back to SQLAlchemy database")
+        import traceback
+        traceback.print_exc()
 
     from app.models import User
     from app.firestore_models import FirestoreUser
