@@ -3,6 +3,28 @@ let auth = null;
 let analytics = null;
 let currentUser = null;
 
+// Helper function to wait for Firebase to be ready
+function waitForFirebase() {
+    return new Promise((resolve, reject) => {
+        if (window.firebaseAuth) {
+            resolve();
+            return;
+        }
+
+        let attempts = 0;
+        const checkInterval = setInterval(() => {
+            attempts++;
+            if (window.firebaseAuth) {
+                clearInterval(checkInterval);
+                resolve();
+            } else if (attempts > 10) { // 5 seconds timeout
+                clearInterval(checkInterval);
+                reject(new Error('Firebase initialization timeout'));
+            }
+        }, 500);
+    });
+}
+
 // Initialize Firebase
 function initializeFirebase(config) {
     if (!config || !config.apiKey) {
@@ -80,20 +102,34 @@ function initializeFirebase(config) {
     document.head.appendChild(script);
 
     // Wait for Firebase to be initialized
-    setTimeout(() => {
+    let initAttempts = 0;
+    const checkInit = setInterval(() => {
+        initAttempts++;
         if (window.firebaseAuth) {
             auth = window.firebaseAuth.auth;
             analytics = window.firebaseAuth.analytics;
             console.log('Firebase initialized successfully');
+            clearInterval(checkInit);
+            // Fire custom event to signal Firebase is ready
+            window.dispatchEvent(new Event('firebaseReady'));
+        } else if (initAttempts > 20) { // 10 seconds timeout
+            console.error('Firebase failed to initialize after 10 seconds');
+            clearInterval(checkInit);
+            showError('Firebase initialization failed. Please refresh the page.');
         }
-    }, 1000);
+    }, 500);
 }
 
 // Sign up with email and password
 async function signUpWithEmail(email, password, displayName) {
     try {
         if (!window.firebaseAuth) {
-            throw new Error('Firebase not initialized');
+            console.error('Firebase not initialized when attempting sign up');
+            // Try to wait for Firebase to be ready
+            await waitForFirebase();
+            if (!window.firebaseAuth) {
+                throw new Error('Firebase not initialized. Please refresh the page and try again.');
+            }
         }
 
         const { auth, createUserWithEmailAndPassword, updateProfile, logEvent } = window.firebaseAuth;
@@ -136,7 +172,11 @@ async function signUpWithEmail(email, password, displayName) {
 async function signInWithEmail(email, password) {
     try {
         if (!window.firebaseAuth) {
-            throw new Error('Firebase not initialized');
+            console.error('Firebase not initialized when attempting sign in');
+            await waitForFirebase();
+            if (!window.firebaseAuth) {
+                throw new Error('Firebase not initialized. Please refresh the page and try again.');
+            }
         }
 
         const { auth, signInWithEmailAndPassword, logEvent } = window.firebaseAuth;
@@ -174,7 +214,11 @@ async function signInWithEmail(email, password) {
 async function signInWithGoogle() {
     try {
         if (!window.firebaseAuth) {
-            throw new Error('Firebase not initialized');
+            console.error('Firebase not initialized when attempting Google sign in');
+            await waitForFirebase();
+            if (!window.firebaseAuth) {
+                throw new Error('Firebase not initialized. Please refresh the page and try again.');
+            }
         }
 
         const { auth, signInWithPopup, GoogleAuthProvider, logEvent } = window.firebaseAuth;
