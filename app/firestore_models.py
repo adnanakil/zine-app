@@ -19,6 +19,7 @@ class FirestoreUser(UserMixin):
             self.password_hash = user_data.get('password_hash')
             self.bio = user_data.get('bio', '')
             self.avatar_url = user_data.get('avatar_url')
+            self.display_name = user_data.get('display_name', user_data.get('username', ''))
             self.followers_count = user_data.get('followers_count', 0)
             self.following_count = user_data.get('following_count', 0)
             self.email_notifications = user_data.get('email_notifications', True)
@@ -93,6 +94,73 @@ class FirestoreUser(UserMixin):
     def get_following(self):
         """Get all following"""
         return firestore_db.get_following(self.id)
+
+    @property
+    def notifications(self):
+        """Return a mock notifications object for compatibility with templates"""
+        class MockNotifications:
+            def filter_by(self, **kwargs):
+                # Return an empty query-like object
+                class MockQuery:
+                    def count(self):
+                        return 0
+                    def all(self):
+                        return []
+                return MockQuery()
+
+            def all(self):
+                return []
+
+        return MockNotifications()
+
+    @property
+    def zines(self):
+        """Return a mock zines object for compatibility with templates"""
+        user_id = self.id
+
+        class MockZines:
+            def filter_by(self, **kwargs):
+                # Get zines from Firestore
+                status = kwargs.get('status', None)
+
+                class MockQuery:
+                    def order_by(self, field):
+                        return self
+
+                    def all(self):
+                        # Get zines from Firestore
+                        zines = firestore_db.get_user_zines(user_id, status=status)
+                        # Convert to object-like format
+                        class ZineObj:
+                            def __init__(self, data):
+                                self.__dict__.update(data)
+                        return [ZineObj(z) for z in zines]
+
+                    def count(self):
+                        return len(self.all())
+
+                return MockQuery()
+
+            def order_by(self, field):
+                return self
+
+            def all(self):
+                zines = firestore_db.get_user_zines(user_id)
+                class ZineObj:
+                    def __init__(self, data):
+                        self.__dict__.update(data)
+                return [ZineObj(z) for z in zines]
+
+        return MockZines()
+
+    @property
+    def followers(self):
+        """Return a mock followers object for compatibility with templates"""
+        class MockFollowers:
+            def all(self):
+                return []
+
+        return MockFollowers()
 
     def update(self, **kwargs):
         """Update user data"""
