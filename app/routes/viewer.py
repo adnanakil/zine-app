@@ -147,13 +147,24 @@ def creator_profile(username):
 
 @bp.route('/<username>/<slug>')
 def view_zine(username, slug):
+    print(f"\n{'='*60}")
+    print(f"VIEW_ZINE ROUTE HIT")
+    print(f"Username: {username}")
+    print(f"Slug: {slug}")
+    print(f"Using Firestore: {use_firestore()}")
+    print(f"{'='*60}")
+
     if use_firestore():
         creator = firestore_db.get_user_by_username(username)
+        print(f"Creator found: {creator}")
         if not creator:
+            print(f"ERROR: No creator found with username: {username}")
             abort(404)
 
         zine = firestore_db.get_zine_by_slug(creator['id'], slug)
+        print(f"Zine found: {zine}")
         if not zine:
+            print(f"ERROR: No zine found with slug: {slug} for creator ID: {creator['id']}")
             abort(404)
 
         if zine['status'] == 'draft':

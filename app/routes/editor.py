@@ -404,8 +404,13 @@ def publish(zine_id):
                     db.session.add(notification)
             db.session.commit()
 
+    # Debug current user info
+    print(f"Current user username: {current_user.username if hasattr(current_user, 'username') else 'NO USERNAME'}")
+    print(f"Current user attributes: {dir(current_user)}")
+
     publish_url = url_for('viewer.view_zine', username=current_user.username, slug=zine_slug, _external=True)
     print(f"Publishing successful! URL: {publish_url}")
+    print(f"Generated URL components - username: {current_user.username}, slug: {zine_slug}")
     print(f"{'='*60}\n")
 
     return jsonify({
