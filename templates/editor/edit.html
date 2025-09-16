@@ -278,7 +278,12 @@ function autoSave() {
             content: content
         })
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            return res.json().then(err => Promise.reject(err));
+        }
+        return res.json();
+    })
     .then(data => {
         if (data.success) {
             hasUnsavedChanges = false;
@@ -299,7 +304,13 @@ function autoSave() {
     .catch(err => {
         console.error('Autosave error:', err);
         saveIndicator.className = 'save-indicator error';
-        saveStatus.textContent = 'Error saving';
+        const errorMsg = err.error || err.message || 'Error saving';
+        saveStatus.textContent = errorMsg;
+
+        // Show more detailed error for debugging
+        if (errorMsg.includes('too large') || errorMsg.includes('size')) {
+            alert('Content is too large to save. Try removing or compressing some images.');
+        }
     })
     .finally(() => {
         isSaving = false;

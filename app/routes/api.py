@@ -67,7 +67,10 @@ def upload_image():
         # Check if image has lots of uniform colors (likely a graphic/logo)
         is_graphic = len(img.getcolors(maxcolors=256) or []) < 256 if img.mode == 'RGB' else False
 
-        if is_graphic and file.filename.lower().endswith('.png'):
+        # Determine final format
+        final_format = 'PNG' if (is_graphic and file.filename.lower().endswith('.png')) else 'JPEG'
+
+        if final_format == 'PNG':
             # Keep PNG for graphics/logos
             img.save(buffered, format='PNG', optimize=True, compress_level=9)
         else:
@@ -75,19 +78,24 @@ def upload_image():
             img.save(buffered, format='JPEG', optimize=True, quality=75, progressive=True)
 
         # Check final size and reduce quality if still too large
-        if buffered.tell() > 200000:  # If over 200KB, reduce quality further
+        if buffered.tell() > 200000:  # If over 200KB, force JPEG with lower quality
             buffered = BytesIO()
             img.save(buffered, format='JPEG', optimize=True, quality=60, progressive=True)
+            final_format = 'JPEG'  # Update format since we forced JPEG
 
+        # Get the base64 string
+        buffered.seek(0)  # Reset buffer position
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        # Determine mime type based on what we actually saved
-        if is_graphic and file.filename.lower().endswith('.png'):
-            mime_type = "image/png"
-        else:
-            mime_type = "image/jpeg"
+        # Set correct mime type based on actual format used
+        mime_type = "image/png" if final_format == 'PNG' else "image/jpeg"
 
         data_url = f"data:{mime_type};base64,{img_str}"
+
+        # Log info for debugging
+        print(f"Image upload: Original size: {file_size/1024:.1f}KB, "
+              f"Final size: {len(img_str)*3/4/1024:.1f}KB, "
+              f"Format: {final_format}, Dimensions: {img.width}x{img.height}")
 
         return jsonify({
             'success': True,
