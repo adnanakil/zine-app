@@ -27,26 +27,66 @@ def upload_image():
         return jsonify({'error': 'No file selected'}), 400
 
     if file and allowed_file(file.filename):
+        # Check file size before processing (max 10MB)
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(0)  # Reset to beginning
+
+        if file_size > 10 * 1024 * 1024:  # 10MB limit
+            return jsonify({'error': 'File too large. Maximum size is 10MB'}), 400
+
         # For Vercel/serverless, we'll use base64 encoding
         # or external image URLs instead of local file storage
         import base64
         from io import BytesIO
 
-        # Read the file into memory
-        img = Image.open(file)
+        try:
+            # Read the file into memory
+            img = Image.open(file)
+        except Exception as e:
+            return jsonify({'error': f'Invalid image file: {str(e)}'}), 400
 
-        # Resize if too large
-        if img.width > 1200 or img.height > 1200:
-            img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+        # Convert RGBA to RGB if necessary (for JPEG compatibility)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # Create a white background
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
 
-        # Convert to base64
+        # More aggressive resizing for better performance
+        # Max dimension of 800px for zine pages (mobile-optimized)
+        if img.width > 800 or img.height > 800:
+            img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+
+        # Convert to base64 with progressive compression
         buffered = BytesIO()
-        img_format = 'PNG' if file.filename.lower().endswith('.png') else 'JPEG'
-        img.save(buffered, format=img_format, optimize=True, quality=85)
+
+        # Always use JPEG for photos to reduce size (except for logos/graphics)
+        # Check if image has lots of uniform colors (likely a graphic/logo)
+        is_graphic = len(img.getcolors(maxcolors=256) or []) < 256 if img.mode == 'RGB' else False
+
+        if is_graphic and file.filename.lower().endswith('.png'):
+            # Keep PNG for graphics/logos
+            img.save(buffered, format='PNG', optimize=True, compress_level=9)
+        else:
+            # Use JPEG with lower quality for photos
+            img.save(buffered, format='JPEG', optimize=True, quality=75, progressive=True)
+
+        # Check final size and reduce quality if still too large
+        if buffered.tell() > 200000:  # If over 200KB, reduce quality further
+            buffered = BytesIO()
+            img.save(buffered, format='JPEG', optimize=True, quality=60, progressive=True)
+
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
-        # Create data URL
-        mime_type = f"image/{img_format.lower()}"
+        # Determine mime type based on what we actually saved
+        if is_graphic and file.filename.lower().endswith('.png'):
+            mime_type = "image/png"
+        else:
+            mime_type = "image/jpeg"
+
         data_url = f"data:{mime_type};base64,{img_str}"
 
         return jsonify({

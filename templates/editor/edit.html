@@ -504,14 +504,32 @@ function stopResize() {
 
 imageUpload.addEventListener('change', (e) => {
     if (e.target.files && e.target.files[0] && selectedElement) {
+        const file = e.target.files[0];
+
+        // Check file size on client side too (10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image is too large. Please use an image smaller than 10MB.');
+            imageUpload.value = ''; // Clear the input
+            return;
+        }
+
+        // Show loading state
+        const originalContent = selectedElement.innerHTML;
+        selectedElement.innerHTML = '<span style="color: #666;">Uploading...</span>';
+
         const formData = new FormData();
-        formData.append('file', e.target.files[0]);
+        formData.append('file', file);
 
         fetch('/api/upload', {
             method: 'POST',
             body: formData
         })
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                return res.json().then(err => Promise.reject(err));
+            }
+            return res.json();
+        })
         .then(data => {
             if (data.success) {
                 selectedElement.innerHTML = '';
@@ -526,7 +544,15 @@ imageUpload.addEventListener('change', (e) => {
                     addResizeHandles(selectedElement);
                 }
                 markAsChanged();
+            } else {
+                throw new Error(data.error || 'Upload failed');
             }
+        })
+        .catch(err => {
+            console.error('Upload error:', err);
+            // Restore original content
+            selectedElement.innerHTML = originalContent;
+            alert('Failed to upload image: ' + (err.error || err.message || 'Unknown error'));
         });
     }
 });
