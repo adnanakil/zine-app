@@ -4,6 +4,28 @@
 
 {% block extra_css %}
 <style>
+    .save-indicator {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        z-index: 1000;
+        transition: all 0.3s ease;
+    }
+    .save-indicator.saving {
+        background: #ffc107;
+        color: #000;
+    }
+    .save-indicator.saved {
+        background: #28a745;
+        color: white;
+    }
+    .save-indicator.error {
+        background: #dc3545;
+        color: white;
+    }
     .editor-container {
         display: flex;
         height: calc(100vh - 120px);
@@ -137,11 +159,15 @@
 
 {% block content %}
 <div class="toolbar">
-    <button id="saveBtn" class="btn-primary">Save</button>
+    <button id="saveBtn" class="btn-primary" style="display: none;">Save</button>
     <button id="addPageBtn" class="btn-secondary">Add Page</button>
     <button id="previewBtn" class="btn-secondary">Preview</button>
     <button id="publishBtn" class="btn-success">Publish</button>
     <span style="margin-left: auto;">{{ zine.title }}</span>
+</div>
+
+<div id="saveIndicator" class="save-indicator saved" style="display: none;">
+    <span id="saveStatus">All changes saved</span>
 </div>
 
 <div class="editor-container">
@@ -191,14 +217,109 @@ let dragOffset = { x: 0, y: 0 };
 let resizeStart = { x: 0, y: 0, width: 0, height: 0 };
 let resizeHandle = null;
 let elements = [];
+let hasUnsavedChanges = false;
+let autosaveTimer = null;
+let isSaving = false;
 
 const pageCanvas = document.getElementById('pageCanvas');
 const imageUpload = document.getElementById('imageUpload');
+const saveIndicator = document.getElementById('saveIndicator');
+const saveStatus = document.getElementById('saveStatus');
+
+// Autosave functions
+function markAsChanged() {
+    hasUnsavedChanges = true;
+
+    // Clear existing timer
+    if (autosaveTimer) {
+        clearTimeout(autosaveTimer);
+    }
+
+    // Show saving indicator
+    saveIndicator.style.display = 'block';
+    saveIndicator.className = 'save-indicator saving';
+    saveStatus.textContent = 'Saving...';
+
+    // Set new timer for autosave (1.5 seconds after last change)
+    autosaveTimer = setTimeout(() => {
+        autoSave();
+    }, 1500);
+}
+
+function autoSave() {
+    if (isSaving || !hasUnsavedChanges) return;
+
+    isSaving = true;
+    const zineId = pageCanvas.dataset.zineId;
+    const content = {
+        blocks: Array.from(pageCanvas.children).map(el => ({
+            type: el.dataset.type,
+            id: el.dataset.id,
+            x: el.style.left,
+            y: el.style.top,
+            width: el.style.width,
+            height: el.style.height,
+            content: el.dataset.type === 'text' ? el.textContent : null,
+            src: el.querySelector('img') ? el.querySelector('img').src : null,
+            style: {
+                fontSize: el.style.fontSize,
+                color: el.style.color,
+                background: el.style.background,
+                borderRadius: el.style.borderRadius
+            }
+        }))
+    };
+
+    fetch(`/editor/${zineId}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            page_id: currentPageId,
+            content: content
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            hasUnsavedChanges = false;
+            saveIndicator.className = 'save-indicator saved';
+            saveStatus.textContent = 'All changes saved';
+
+            // Hide indicator after 2 seconds
+            setTimeout(() => {
+                if (!hasUnsavedChanges) {
+                    saveIndicator.style.display = 'none';
+                }
+            }, 2000);
+        } else {
+            saveIndicator.className = 'save-indicator error';
+            saveStatus.textContent = 'Error saving';
+        }
+    })
+    .catch(err => {
+        console.error('Autosave error:', err);
+        saveIndicator.className = 'save-indicator error';
+        saveStatus.textContent = 'Error saving';
+    })
+    .finally(() => {
+        isSaving = false;
+    });
+}
+
+// Save before leaving page
+window.addEventListener('beforeunload', (e) => {
+    if (hasUnsavedChanges) {
+        autoSave();
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+    }
+});
 
 document.querySelectorAll('.element-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const type = e.target.dataset.type;
         addElement(type);
+        markAsChanged();
     });
 });
 
@@ -212,6 +333,11 @@ function addElement(type, options = {}) {
         element.contentEditable = true;
         element.textContent = options.content || 'Click to edit';
         element.style.fontSize = options.fontSize || '16px';
+
+        // Add input event listener for text changes
+        element.addEventListener('input', () => {
+            markAsChanged();
+        });
     } else if (type === 'image') {
         if (options.src) {
             const img = document.createElement('img');
@@ -302,6 +428,7 @@ function stopDrag() {
     isDragging = false;
     document.removeEventListener('mousemove', drag);
     document.removeEventListener('mouseup', stopDrag);
+    markAsChanged();
 }
 
 function startResize(e, element, handle) {
@@ -366,6 +493,7 @@ function stopResize() {
     isResizing = false;
     document.removeEventListener('mousemove', resize);
     document.removeEventListener('mouseup', stopResize);
+    markAsChanged();
 }
 
 imageUpload.addEventListener('change', (e) => {
@@ -391,52 +519,18 @@ imageUpload.addEventListener('change', (e) => {
                 if (!selectedElement.querySelector('.resize-handle')) {
                     addResizeHandles(selectedElement);
                 }
+                markAsChanged();
             }
         });
     }
 });
 
-document.getElementById('saveBtn').addEventListener('click', () => {
-    const zineId = pageCanvas.dataset.zineId;
-    const content = {
-        blocks: Array.from(pageCanvas.children).map(el => ({
-            type: el.dataset.type,
-            id: el.dataset.id,
-            x: el.style.left,
-            y: el.style.top,
-            width: el.style.width,
-            height: el.style.height,
-            content: el.dataset.type === 'text' ? el.textContent : null,
-            src: el.querySelector('img') ? el.querySelector('img').src : null,
-            style: {
-                fontSize: el.style.fontSize,
-                color: el.style.color,
-                background: el.style.background,
-                borderRadius: el.style.borderRadius
-            }
-        }))
-    };
-
-    fetch(`/editor/${zineId}/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            page_id: currentPageId,
-            content: content
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            alert('Saved successfully!');
-        } else if (data.error) {
-            alert('Error: ' + data.error);
-        }
-    })
-    .catch(err => {
-        console.error('Save error:', err);
-        alert('Failed to save: ' + err.message);
-    });
+// Manual save button is hidden but can be triggered with Ctrl+S
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        autoSave();
+    }
 });
 
 document.getElementById('addPageBtn').addEventListener('click', () => {
@@ -520,7 +614,10 @@ document.getElementById('publishBtn').addEventListener('click', () => {
 
 document.querySelectorAll('.page-thumb').forEach(thumb => {
     thumb.addEventListener('click', (e) => {
-        document.getElementById('saveBtn').click();
+        // Save current page before switching
+        if (hasUnsavedChanges) {
+            autoSave();
+        }
         currentPageId = e.target.dataset.pageId;
         document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
         e.target.classList.add('active');
