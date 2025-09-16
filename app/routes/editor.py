@@ -262,6 +262,46 @@ def save(zine_id):
 
         return jsonify({'success': True, 'page_id': page.id})
 
+@bp.route('/<zine_id>/page/<page_id>', methods=['GET'])
+@login_required
+def get_page(zine_id, page_id):
+    """Get a specific page's content"""
+    if use_firestore():
+        # Verify ownership
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Get the page
+        page = firestore_db.get_page_by_id(page_id)
+        if not page or page.get('zine_id') != zine_id:
+            return jsonify({'error': 'Page not found'}), 404
+
+        return jsonify({
+            'success': True,
+            'content': page.get('content', {'blocks': []})
+        })
+    else:
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+            page_id = int(page_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid ID'}), 400
+
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        page = Page.query.get_or_404(page_id)
+        if page.zine_id != zine_id:
+            return jsonify({'error': 'Invalid page'}), 400
+
+        return jsonify({
+            'success': True,
+            'content': page.content or {'blocks': []}
+        })
+
 @bp.route('/<zine_id>/add-page', methods=['POST'])
 @login_required
 def add_page(zine_id):

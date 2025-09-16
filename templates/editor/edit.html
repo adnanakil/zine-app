@@ -318,12 +318,11 @@ window.addEventListener('beforeunload', (e) => {
 document.querySelectorAll('.element-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const type = e.target.dataset.type;
-        addElement(type);
-        markAsChanged();
+        addElement(type); // addElement will call markAsChanged
     });
 });
 
-function addElement(type, options = {}) {
+function addElement(type, options = {}, shouldMarkAsChanged = true) {
     const element = document.createElement('div');
     element.className = 'draggable-element ' + type;
     element.dataset.type = type;
@@ -372,6 +371,11 @@ function addElement(type, options = {}) {
     element.addEventListener('mousedown', startDrag);
     pageCanvas.appendChild(element);
     elements.push(element);
+
+    // Only mark as changed if this is a user action (not loading from saved data)
+    if (shouldMarkAsChanged) {
+        markAsChanged();
+    }
 }
 
 function addResizeHandles(element) {
@@ -534,6 +538,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.getElementById('addPageBtn').addEventListener('click', () => {
+    // Save current page first
+    if (hasUnsavedChanges) {
+        autoSave();
+    }
+
     const zineId = pageCanvas.dataset.zineId;
     fetch(`/editor/${zineId}/add-page`, {
         method: 'POST',
@@ -542,7 +551,32 @@ document.getElementById('addPageBtn').addEventListener('click', () => {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            location.reload();
+            // Add the new page to the sidebar
+            const pageList = document.querySelector('.page-list');
+            const pageCount = document.querySelectorAll('.page-thumb').length;
+            const newPageThumb = document.createElement('div');
+            newPageThumb.className = 'page-thumb';
+            newPageThumb.dataset.pageId = data.page_id;
+            newPageThumb.textContent = `Page ${pageCount + 1}`;
+
+            // Add click handler
+            newPageThumb.addEventListener('click', (e) => {
+                if (hasUnsavedChanges) {
+                    autoSave();
+                }
+                currentPageId = e.target.dataset.pageId;
+                document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                loadPage(currentPageId);
+            });
+
+            pageList.appendChild(newPageThumb);
+
+            // Switch to the new page
+            document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
+            newPageThumb.classList.add('active');
+            currentPageId = data.page_id;
+            loadPage(data.page_id);
         } else if (data.error) {
             alert('Error: ' + data.error);
         }
@@ -647,9 +681,89 @@ function loadTemplate(templateId) {
 }
 
 function loadPage(pageId) {
+    if (!pageId) return;
+
+    const zineId = pageCanvas.dataset.zineId;
+
+    // Clear the canvas
+    pageCanvas.innerHTML = '';
+    elements = [];
+
+    // Show loading indicator
+    saveIndicator.style.display = 'block';
+    saveIndicator.className = 'save-indicator saving';
+    saveStatus.textContent = 'Loading page...';
+
+    // Fetch page content
+    fetch(`/editor/${zineId}/page/${pageId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.content) {
+                // Load blocks from the page
+                const blocks = data.content.blocks || [];
+                blocks.forEach(block => {
+                    // Recreate each element
+                    addElement(block.type, {
+                        x: block.x,
+                        y: block.y,
+                        width: block.width,
+                        height: block.height,
+                        content: block.content,
+                        src: block.src,
+                        fontSize: block.style?.fontSize,
+                        color: block.style?.color,
+                        background: block.style?.background,
+                        borderRadius: block.style?.borderRadius,
+                        shape: block.style?.borderRadius ? 'circle' : 'square'
+                    }, false); // false = don't mark as changed
+                });
+
+                // Update current page ID
+                currentPageId = pageId;
+
+                // Hide loading indicator
+                saveIndicator.className = 'save-indicator saved';
+                saveStatus.textContent = 'Page loaded';
+                setTimeout(() => {
+                    saveIndicator.style.display = 'none';
+                }, 1000);
+            } else {
+                console.error('Failed to load page:', data.error);
+                saveIndicator.className = 'save-indicator error';
+                saveStatus.textContent = 'Error loading page';
+            }
+        })
+        .catch(err => {
+            console.error('Error loading page:', err);
+            saveIndicator.className = 'save-indicator error';
+            saveStatus.textContent = 'Error loading page';
+        });
 }
 
+// Initialize page switching for existing page thumbnails
+document.querySelectorAll('.page-thumb').forEach(thumb => {
+    thumb.addEventListener('click', (e) => {
+        // Save current page if there are changes
+        if (hasUnsavedChanges) {
+            autoSave();
+        }
+
+        // Get the page ID and switch to it
+        const pageId = e.currentTarget.dataset.pageId;
+        if (pageId === currentPageId) return; // Already on this page
+
+        // Update active state
+        document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+
+        // Load the new page
+        loadPage(pageId);
+    });
+});
+
+// Load the first page on init
 {% if pages %}
+currentPageId = "{{ pages[0].id }}";
 loadPage("{{ pages[0].id }}");
 {% endif %}
 </script>
