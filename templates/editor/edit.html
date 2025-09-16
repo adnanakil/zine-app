@@ -566,19 +566,27 @@ document.getElementById('addPageBtn').addEventListener('click', () => {
                 if (hasUnsavedChanges) {
                     autoSave();
                 }
-                currentPageId = e.target.dataset.pageId;
+                const pageId = e.currentTarget.dataset.pageId;
+                if (pageId === currentPageId) return; // Already on this page
                 document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
-                e.target.classList.add('active');
-                loadPage(currentPageId);
+                e.currentTarget.classList.add('active');
+                loadPage(pageId);
             });
 
             pageList.appendChild(newPageThumb);
 
-            // Switch to the new page
+            // Switch to the new page (just clear canvas, don't load from server)
             document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
             newPageThumb.classList.add('active');
+
+            // Clear canvas for new page
+            pageCanvas.innerHTML = '';
+            elements = [];
+            selectedElement = null;
+            isDragging = false;
+            isResizing = false;
             currentPageId = data.page_id;
-            loadPage(data.page_id);
+            hasUnsavedChanges = false;
         } else if (data.error) {
             alert('Error: ' + data.error);
         }
@@ -654,10 +662,11 @@ document.querySelectorAll('.page-thumb').forEach(thumb => {
         if (hasUnsavedChanges) {
             autoSave();
         }
-        currentPageId = e.target.dataset.pageId;
+        const pageId = e.currentTarget.dataset.pageId;
+        if (pageId === currentPageId) return; // Already on this page
         document.querySelectorAll('.page-thumb').forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        loadPage(currentPageId);
+        e.currentTarget.classList.add('active');
+        loadPage(pageId);
     });
 });
 

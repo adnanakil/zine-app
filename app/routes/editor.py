@@ -196,7 +196,9 @@ def save(zine_id):
         if page_id:
             # Update existing page
             page = firestore_db.get_page_by_id(page_id)
-            if page and page.get('zine_id') != zine_id:
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            if page.get('zine_id') != zine_id:
                 return jsonify({'error': 'Invalid page'}), 400
 
             # Update the page content
