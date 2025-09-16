@@ -347,13 +347,15 @@ function addElement(type, options = {}, shouldMarkAsChanged = true) {
             element.appendChild(img);
         } else {
             element.innerHTML = '<span>Click to upload image</span>';
-            element.addEventListener('click', () => {
-                if (!isDragging && !isResizing) {
-                    selectedElement = element;
-                    imageUpload.click();
-                }
-            });
         }
+        // Add click handler for both new and existing images
+        element.addEventListener('click', function(e) {
+            if (!isDragging && !isResizing) {
+                selectedElement = e.currentTarget;
+                imageUpload.value = ''; // Clear the input first
+                imageUpload.click();
+            }
+        });
         // Add resize handles for images
         addResizeHandles(element);
     } else if (type === 'shape') {
@@ -685,9 +687,12 @@ function loadPage(pageId) {
 
     const zineId = pageCanvas.dataset.zineId;
 
-    // Clear the canvas
+    // Clear the canvas and reset state
     pageCanvas.innerHTML = '';
     elements = [];
+    selectedElement = null;  // Reset selected element when switching pages
+    isDragging = false;
+    isResizing = false;
 
     // Show loading indicator
     saveIndicator.style.display = 'block';
