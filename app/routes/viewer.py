@@ -233,8 +233,21 @@ def view_zine(username, slug):
         creator_obj = creator
         pages_objs = pages
 
+    # Detect mobile device
+    user_agent = request.headers.get('User-Agent', '').lower()
+    is_mobile = any(device in user_agent for device in ['mobile', 'android', 'iphone', 'ipad'])
+
+    # Force mobile view if requested via query parameter
+    if request.args.get('mobile') == 'true':
+        is_mobile = True
+    elif request.args.get('mobile') == 'false':
+        is_mobile = False
+
+    # Choose template based on device
+    template = 'viewer/view_mobile.html' if is_mobile else 'viewer/view.html'
+
     response = make_response(render_template(
-        'viewer/view.html',
+        template,
         zine=zine_obj,
         pages=pages_objs,
         creator=creator_obj,

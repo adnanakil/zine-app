@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% block title %}{{ zine.title }} by {{ creator.username }} - Zines{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hide navigation on mobile viewer */
+    .navbar, .footer {
+        display: none;
+    }
+
+    body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+    }
+
+    .mobile-viewer {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        overflow: hidden;
+        touch-action: none; /* Prevent browser gestures */
+    }
+
+    .pages-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.3s ease-out;
+    }
+
+    .page-wrapper {
+        position: absolute;
+        width: 100vw;
+        height: 100vh;
+        top: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .page-viewer {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: white;
+        overflow: hidden;
+    }
+
+    .page-content {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .page-element {
+        position: absolute;
+    }
+
+    .page-element.text {
+        padding: 10px;
+        overflow-wrap: break-word;
+    }
+
+    .page-element.image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Page indicator */
+    .page-indicator {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        z-index: 1000;
+        pointer-events: none;
+    }
+
+    /* Close button */
+    .close-viewer {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        font-size: 24px;
+        z-index: 1001;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Swipe hint */
+    .swipe-hint {
+        position: fixed;
+        bottom: 60px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 12px;
+        animation: fadeOut 3s forwards;
+        pointer-events: none;
+        z-index: 999;
+    }
+
+    @keyframes fadeOut {
+        0% { opacity: 1; }
+        70% { opacity: 1; }
+        100% { opacity: 0; }
+    }
+
+    /* Desktop fallback */
+    @media (min-width: 769px) {
+        .mobile-viewer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f0f0f0;
+        }
+
+        .pages-container {
+            width: min(400px, 90vw);
+            height: min(711px, 90vh);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .page-wrapper {
+            width: 100%;
+            height: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mobile-viewer" id="mobileViewer">
+    <button class="close-viewer" onclick="closeViewer()">×</button>
+
+    <div class="pages-container" id="pagesContainer">
+        {% for page in pages %}
+        <div class="page-wrapper" data-page="{{ loop.index0 }}" style="transform: translateY({{ loop.index0 * 100 }}%);">
+            <div class="page-viewer">
+                <div class="page-content">
+                    {% if page.content %}
+                        {% set elements = page.content.blocks or page.content.elements or [] %}
+                        {% for block in elements %}
+                            <div class="page-element {{ block.type }}"
+                                 style="left: {{ block.x }}{% if block.x is number %}px{% endif %};
+                                        top: {{ block.y }}{% if block.y is number %}px{% endif %};
+                                        width: {{ block.width }}{% if block.width is number %}px{% endif %};
+                                        height: {{ block.height }}{% if block.height is number %}px{% endif %};
+                                        {% if block.style %}
+                                            font-size: {{ block.style.fontSize }};
+                                            color: {{ block.style.color }};
+                                            background: {{ block.style.background }};
+                                            border-radius: {{ block.style.borderRadius }};
+                                        {% endif %}">
+                                {% if block.type == 'text' %}
+                                    {{ block.content|safe }}
+                                {% elif block.type == 'image' and block.src %}
+                                    <img src="{{ block.src }}" alt="" loading="lazy">
+                                {% elif block.type == 'shape' %}
+                                    <div style="width: 100%; height: 100%; background: {{ block.style.background }}; border-radius: {{ block.style.borderRadius }};"></div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="page-indicator" id="pageIndicator">
+        1 / {{ pages|length }}
+    </div>
+
+    <div class="swipe-hint" id="swipeHint">
+        Swipe up for next page
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const totalPages = {{ pages|length }};
+    let currentPage = 0;
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+
+    const pagesContainer = document.getElementById('pagesContainer');
+    const pageIndicator = document.getElementById('pageIndicator');
+    const viewer = document.getElementById('mobileViewer');
+
+    function updatePagePosition(animated = true) {
+        const translateY = -currentPage * 100;
+        pagesContainer.style.transition = animated ? 'transform 0.3s ease-out' : 'none';
+        pagesContainer.style.transform = `translateY(${translateY}%)`;
+        pageIndicator.textContent = `${currentPage + 1} / ${totalPages}`;
+
+        // Update URL without reload
+        const newUrl = `${window.location.pathname}#page-${currentPage + 1}`;
+        history.replaceState({ page: currentPage }, '', newUrl);
+    }
+
+    function goToPage(pageNum) {
+        if (pageNum >= 0 && pageNum < totalPages) {
+            currentPage = pageNum;
+            updatePagePosition();
+        }
+    }
+
+    function nextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            updatePagePosition();
+        }
+    }
+
+    function prevPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            updatePagePosition();
+        }
+    }
+
+    // Touch events for swipe
+    viewer.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY;
+        isDragging = true;
+        pagesContainer.style.transition = 'none';
+    }, { passive: true });
+
+    viewer.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+
+        currentY = e.touches[0].clientY;
+        const deltaY = startY - currentY;
+        const threshold = 50; // Minimum swipe distance
+
+        // Add resistance at boundaries
+        let translateY = -currentPage * 100;
+        if (currentPage === 0 && deltaY < 0) {
+            // At first page, swiping down
+            translateY = deltaY * 0.3 / window.innerHeight * 100;
+        } else if (currentPage === totalPages - 1 && deltaY > 0) {
+            // At last page, swiping up
+            translateY = -currentPage * 100 + deltaY * 0.3 / window.innerHeight * 100;
+        } else {
+            // Normal swipe
+            translateY = -currentPage * 100 + (-deltaY / window.innerHeight * 100);
+        }
+
+        pagesContainer.style.transform = `translateY(${translateY}%)`;
+    }, { passive: true });
+
+    viewer.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+
+        const deltaY = startY - currentY;
+        const threshold = 50;
+
+        if (Math.abs(deltaY) > threshold) {
+            if (deltaY > 0 && currentPage < totalPages - 1) {
+                // Swipe up - next page
+                nextPage();
+            } else if (deltaY < 0 && currentPage > 0) {
+                // Swipe down - previous page
+                prevPage();
+            } else {
+                // Bounce back
+                updatePagePosition();
+            }
+        } else {
+            // Not enough swipe distance, bounce back
+            updatePagePosition();
+        }
+    }, { passive: true });
+
+    // Mouse events for desktop testing
+    let mouseDown = false;
+    viewer.addEventListener('mousedown', (e) => {
+        startY = e.clientY;
+        mouseDown = true;
+        pagesContainer.style.transition = 'none';
+    });
+
+    viewer.addEventListener('mousemove', (e) => {
+        if (!mouseDown) return;
+
+        currentY = e.clientY;
+        const deltaY = startY - currentY;
+
+        let translateY = -currentPage * 100;
+        if (currentPage === 0 && deltaY < 0) {
+            translateY = deltaY * 0.3 / window.innerHeight * 100;
+        } else if (currentPage === totalPages - 1 && deltaY > 0) {
+            translateY = -currentPage * 100 + deltaY * 0.3 / window.innerHeight * 100;
+        } else {
+            translateY = -currentPage * 100 + (-deltaY / window.innerHeight * 100);
+        }
+
+        pagesContainer.style.transform = `translateY(${translateY}%)`;
+    });
+
+    viewer.addEventListener('mouseup', (e) => {
+        if (!mouseDown) return;
+        mouseDown = false;
+
+        const deltaY = startY - currentY;
+        const threshold = 50;
+
+        if (Math.abs(deltaY) > threshold) {
+            if (deltaY > 0 && currentPage < totalPages - 1) {
+                nextPage();
+            } else if (deltaY < 0 && currentPage > 0) {
+                prevPage();
+            } else {
+                updatePagePosition();
+            }
+        } else {
+            updatePagePosition();
+        }
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+            prevPage();
+            e.preventDefault();
+        } else if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+            nextPage();
+            e.preventDefault();
+        } else if (e.key === 'Home') {
+            goToPage(0);
+            e.preventDefault();
+        } else if (e.key === 'End') {
+            goToPage(totalPages - 1);
+            e.preventDefault();
+        }
+    });
+
+    // Handle URL hash for direct page access
+    const hash = window.location.hash;
+    if (hash) {
+        const match = hash.match(/page-(\d+)/);
+        if (match) {
+            const pageNum = parseInt(match[1]) - 1;
+            if (pageNum >= 0 && pageNum < totalPages) {
+                currentPage = pageNum;
+                updatePagePosition(false);
+            }
+        }
+    }
+
+    // Prevent pull-to-refresh
+    let lastY = 0;
+    viewer.addEventListener('touchstart', (e) => {
+        lastY = e.touches[0].clientY;
+    }, { passive: false });
+
+    viewer.addEventListener('touchmove', (e) => {
+        const currentY = e.touches[0].clientY;
+        if (currentY > lastY && window.scrollY === 0) {
+            e.preventDefault();
+        }
+        lastY = currentY;
+    }, { passive: false });
+
+    // Close viewer function
+    window.closeViewer = function() {
+        // Go back to the previous page or to the creator's profile
+        if (document.referrer && document.referrer.includes(window.location.hostname)) {
+            window.history.back();
+        } else {
+            window.location.href = '/{{ creator.username }}';
+        }
+    };
+
+    // Track reading time
+    let startTime = Date.now();
+    window.addEventListener('beforeunload', () => {
+        const readTime = Math.round((Date.now() - startTime) / 1000);
+        if (readTime > 5) {
+            navigator.sendBeacon('/api/track-read-time', JSON.stringify({
+                zine_id: '{{ zine.id }}',
+                read_time: readTime
+            }));
+        }
+    });
+})();
+</script>
+{% endblock %}

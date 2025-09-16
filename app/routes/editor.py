@@ -265,45 +265,101 @@ def save(zine_id):
 @bp.route('/<zine_id>/add-page', methods=['POST'])
 @login_required
 def add_page(zine_id):
-    zine = Zine.query.get_or_404(zine_id)
-    if zine.creator_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    if use_firestore():
+        # Firestore implementation
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
 
-    last_page = Page.query.filter_by(zine_id=zine_id).order_by(Page.order.desc()).first()
-    next_order = (last_page.order + 1) if last_page else 0
+        # Get existing pages to determine next order
+        pages = firestore_db.get_zine_pages(zine_id)
+        next_order = max([p.get('order', 0) for p in pages]) + 1 if pages else 0
 
-    page = Page(
-        zine_id=zine_id,
-        order=next_order,
-        content={'blocks': []},
-        template='blank'
-    )
-    db.session.add(page)
-    db.session.commit()
+        # Create new page
+        new_page = firestore_db.create_page(
+            zine_id=zine_id,
+            order=next_order,
+            content={'blocks': []},
+            template='blank'
+        )
 
-    return jsonify({'success': True, 'page_id': page.id, 'order': page.order})
+        return jsonify({'success': True, 'page_id': new_page['id'], 'order': next_order})
+    else:
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid zine ID'}), 400
+
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        last_page = Page.query.filter_by(zine_id=zine_id).order_by(Page.order.desc()).first()
+        next_order = (last_page.order + 1) if last_page else 0
+
+        page = Page(
+            zine_id=zine_id,
+            order=next_order,
+            content={'blocks': []},
+            template='blank'
+        )
+        db.session.add(page)
+        db.session.commit()
+
+        return jsonify({'success': True, 'page_id': page.id, 'order': page.order})
 
 @bp.route('/<zine_id>/delete-page/<page_id>', methods=['DELETE'])
 @login_required
 def delete_page(zine_id, page_id):
-    zine = Zine.query.get_or_404(zine_id)
-    if zine.creator_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
+    if use_firestore():
+        # Firestore implementation
+        zine = firestore_db.get_zine_by_id(zine_id)
+        if not zine or zine.get('creator_id') != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
 
-    page = Page.query.get_or_404(page_id)
-    if page.zine_id != zine_id:
-        return jsonify({'error': 'Invalid page'}), 400
+        page = firestore_db.get_page_by_id(page_id)
+        if not page or page.get('zine_id') != zine_id:
+            return jsonify({'error': 'Invalid page'}), 400
 
-    deleted_order = page.order
-    db.session.delete(page)
+        # Delete the page
+        firestore_db._get_db().collection('pages').document(page_id).delete()
 
-    Page.query.filter(
-        Page.zine_id == zine_id,
-        Page.order > deleted_order
-    ).update({Page.order: Page.order - 1})
+        # Reorder remaining pages
+        pages = firestore_db.get_zine_pages(zine_id)
+        deleted_order = page.get('order', 0)
 
-    db.session.commit()
-    return jsonify({'success': True})
+        for p in pages:
+            if p.get('order', 0) > deleted_order:
+                firestore_db.update_page(p['id'], {'order': p['order'] - 1})
+
+        return jsonify({'success': True})
+    else:
+        # SQLAlchemy fallback
+        try:
+            zine_id = int(zine_id)
+            page_id = int(page_id)
+        except ValueError:
+            return jsonify({'error': 'Invalid ID'}), 400
+
+        zine = Zine.query.get_or_404(zine_id)
+        if zine.creator_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        page = Page.query.get_or_404(page_id)
+        if page.zine_id != zine_id:
+            return jsonify({'error': 'Invalid page'}), 400
+
+        deleted_order = page.order
+        db.session.delete(page)
+
+        Page.query.filter(
+            Page.zine_id == zine_id,
+            Page.order > deleted_order
+        ).update({Page.order: Page.order - 1})
+
+        db.session.commit()
+        return jsonify({'success': True})
 
 @bp.route('/<zine_id>/publish', methods=['POST'])
 @login_required
