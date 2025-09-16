@@ -543,18 +543,47 @@ imageUpload.addEventListener('change', (e) => {
         })
         .then(data => {
             if (data.success) {
+                // Validate the data URL format
+                if (!data.url || !data.url.startsWith('data:')) {
+                    throw new Error('Invalid image data received from server');
+                }
+
+                // Check if data URL is valid
+                const matches = data.url.match(/^data:([^;]+);base64,(.+)$/);
+                if (!matches) {
+                    console.error('Invalid data URL format:', data.url.substring(0, 100));
+                    throw new Error('Invalid data URL format');
+                }
+
                 selectedElement.innerHTML = '';
                 const img = document.createElement('img');
-                img.src = data.url;
+
+                // Set up error handler before setting src
+                img.onerror = function(e) {
+                    console.error('Image load error:', e);
+                    throw new Error('Failed to load image data');
+                };
+
+                img.onload = function() {
+                    // Add resize handles after image loads successfully
+                    if (!selectedElement.querySelector('.resize-handle')) {
+                        addResizeHandles(selectedElement);
+                    }
+                    markAsChanged();
+                };
+
                 img.style.width = '100%';
                 img.style.height = '100%';
                 img.style.objectFit = 'cover';
-                selectedElement.appendChild(img);
-                // Add resize handles after uploading
-                if (!selectedElement.querySelector('.resize-handle')) {
-                    addResizeHandles(selectedElement);
+
+                // Try to set the src
+                try {
+                    img.src = data.url;
+                    selectedElement.appendChild(img);
+                } catch (e) {
+                    console.error('Error setting image src:', e);
+                    throw new Error('Failed to set image: ' + e.message);
                 }
-                markAsChanged();
             } else {
                 throw new Error(data.error || 'Upload failed');
             }

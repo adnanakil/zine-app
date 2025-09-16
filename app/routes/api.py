@@ -17,6 +17,26 @@ UPLOAD_FOLDER = 'static/uploads'
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+@bp.route('/upload-test', methods=['GET'])
+def upload_test():
+    """Test endpoint to verify data URL generation"""
+    import base64
+    from io import BytesIO
+
+    # Create a simple 1x1 red pixel image
+    img = Image.new('RGB', (1, 1), color='red')
+    buffered = BytesIO()
+    img.save(buffered, format='JPEG')
+    buffered.seek(0)
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    data_url = f"data:image/jpeg;base64,{img_str}"
+
+    return jsonify({
+        'success': True,
+        'url': data_url,
+        'length': len(data_url)
+    })
+
 @bp.route('/upload', methods=['POST'])
 def upload_image():
     if 'file' not in request.files:
